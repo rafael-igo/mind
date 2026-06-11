@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { carregarGrafo, carregarMemoria, orquestrar, resolverDadosRaiz } from "../lib/core.ts";
+import { carregarGrafo, carregarMemoria, orquestrar, resolverDadosRaiz, sensibilidadeDoMeta } from "../lib/core.ts";
 import { calcularSla } from "../lib/motor-sla.ts";
 import { gerarMermaid } from "../lib/projecao.ts";
 import { parseOperacaoGrafo } from "../lib/grafo-editor.ts";
@@ -178,6 +178,13 @@ console.log("   →", r18.resposta, "\n");
 const r19 = await orquestrar({ usuario: "operador-exemplo", texto: "como funciona a cascata logística?" }, raiz);
 ok(r19.modo !== "cascata" && r19.contexto.includes("cascata-logistica"),
   "Fase 6 — pergunta de CONHECIMENTO sobre cascata continua indo para a memória (não confunde com a view)");
+
+// --- Permissão em bases externas: docs com `publico:` (sem `sensibilidade:`) não caem no default interno ---
+ok(sensibilidadeDoMeta({ publico: "diretoria, gestao-operacoes" }) === "restrito" &&
+  sensibilidadeDoMeta({ publico: "diretoria, lideranca" }) === "confidencial" &&
+  sensibilidadeDoMeta({ publico: "lideranca, diretoria, todas-areas" }) === "interno" &&
+  sensibilidadeDoMeta({ sensibilidade: "alta", publico: "todas-areas" }) === "restrito",
+  "Permissão — campo `publico:` de base externa vira sensibilidade (resumo de diretoria NÃO fica interno)");
 
 // --- Memória vetorial: degradação silenciosa quando Ollama está desligado ---
 const { ollamaDisponivel, buscarVetorial } = await import("../lib/memoria-vetorial.ts");

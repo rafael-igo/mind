@@ -173,6 +173,29 @@ function normalizarSensibilidade(v?: string): Sensibilidade {
   return "interno";
 }
 
+// Audiências amplas das bases externas (campo `publico:`): se o doc é para alguma delas,
+// o nível interno basta. Sem audiência ampla, o doc é de gestão/liderança — NÃO pode cair
+// no default interno (um operador leria resumo de diretoria).
+const AUDIENCIAS_AMPLAS = [
+  "todas-areas", "todas as areas", "operador", "apoio", "consultor", "especialista",
+  "agencia", "cliente-final", "ops", "ti",
+];
+const AUDIENCIAS_DIRECAO = ["diretoria", "lideranca", "socios", "diretor"];
+
+/** Resolve a sensibilidade de um doc: campo `sensibilidade` manda; sem ele, deriva do `publico:`. */
+export function sensibilidadeDoMeta(meta: Record<string, string>): Sensibilidade {
+  if (meta.sensibilidade) return normalizarSensibilidade(meta.sensibilidade);
+  const pub = (meta.publico ?? "").toLowerCase();
+  if (pub) {
+    if (AUDIENCIAS_AMPLAS.some((a) => pub.includes(a))) return "interno";
+    // só direção/liderança listada => confidencial (rank diretor); demais gestões => restrito
+    const partes = pub.replace(/^\[|\]$/g, "").split(",").map((p) => p.trim()).filter(Boolean);
+    if (partes.length && partes.every((p) => AUDIENCIAS_DIRECAO.some((d) => p.includes(d)))) return "confidencial";
+    return "restrito";
+  }
+  return "interno";
+}
+
 /** Pastas de memória: a própria da Mind + extras (env MIND_MEMORIA_EXTRA, separadas por vírgula). */
 export function fontesMemoria(raiz = resolverDadosRaiz()): string[] {
   const fontes = [path.join(raiz, "memoria")];
@@ -215,7 +238,7 @@ export function carregarMemoria(raiz = resolverDadosRaiz()): DocMemoria[] {
           titulo: meta.titulo || f,
           tipo: meta.tipo || meta.categoria || "conceito",
           comunidade: meta.comunidade || com.nome,
-          sensibilidade: normalizarSensibilidade(meta.sensibilidade),
+          sensibilidade: sensibilidadeDoMeta(meta),
           tags: parseLista(meta.tags),
           corpo,
           arquivo: path.join(com.dir, f),
