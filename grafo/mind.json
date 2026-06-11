@@ -1,0 +1,90 @@
+{
+  "versao": "0.1.0",
+  "dominio": "mind-plataforma",
+  "atualizado_em": "2026-06-11",
+  "nos": [
+    {
+      "id": "mind-plataforma",
+      "tipo": "dominio",
+      "titulo": "Plataforma Mind",
+      "descricao": "A infraestrutura do cérebro: orquestrador, gateway LLM, memória (lexical + vetorial) e motores.",
+      "dominio": null,
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": ["decisao-20260611-arquitetura-vetorial"]
+    },
+    {
+      "id": "orquestrador-mind",
+      "tipo": "motor",
+      "titulo": "Orquestrador (core.ts)",
+      "descricao": "Escuta → roteia (freio/SLA/mudança/memória) → Fala. Decide o canal Claude: API via gateway para fala/cognição; executor headless (claude -p) candidato para tarefas de código.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": []
+    },
+    {
+      "id": "gateway-mind",
+      "tipo": "motor",
+      "titulo": "Gateway LLM da Mind",
+      "descricao": "Branch mind-gateway do igo-ai-gateway, porta 4101, Postgres em Docker. Escolhe o modelo Claude por nível do usuário; auditoria, budget e guardrails.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": []
+    },
+    {
+      "id": "motor-memoria-vetorial",
+      "tipo": "motor",
+      "titulo": "Memória Vetorial (pgvector)",
+      "descricao": "Busca semântica sobre a memória Markdown: chunks (1000/200) + embeddings Ollama em pgvector no Postgres do gateway. podeVer() filtra DEPOIS da busca.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "em-dev",
+      "memoria": ["decisao-20260611-arquitetura-vetorial"]
+    },
+    {
+      "id": "ollama-local",
+      "tipo": "modulo",
+      "titulo": "Ollama (embeddings local)",
+      "descricao": "Converte texto em vetor (nomic-embed-text). Roda em máquina que liga sob demanda — a Mind monitora a disponibilidade e degrada para busca lexical quando desligado.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "planejado",
+      "memoria": ["decisao-20260611-arquitetura-vetorial"]
+    },
+    {
+      "id": "mind-ingestor",
+      "tipo": "modulo",
+      "titulo": "Motor de Memória (mind-ingestor)",
+      "descricao": "MCP híbrido (stdio + HTTP 4180): captura chats em memória recente, valida padrão, consolida via _inbox + aprovação.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": []
+    },
+    {
+      "id": "studio-pecas",
+      "tipo": "modulo",
+      "titulo": "IGO AI Studio (banco de peças)",
+      "descricao": "O que era para ser a Mind, mas não deu. NÃO é dependência: fonte de peças (chunker, contrato semantic_search, health-checks). Mind é independente dele por decisão de 11/jun/2026.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ideia",
+      "memoria": ["decisao-20260611-arquitetura-vetorial"]
+    }
+  ],
+  "arestas": [
+    { "de": "mind-plataforma", "para": "orquestrador-mind", "tipo": "contem" },
+    { "de": "mind-plataforma", "para": "gateway-mind", "tipo": "contem" },
+    { "de": "mind-plataforma", "para": "motor-memoria-vetorial", "tipo": "contem" },
+    { "de": "mind-plataforma", "para": "ollama-local", "tipo": "contem" },
+    { "de": "mind-plataforma", "para": "mind-ingestor", "tipo": "contem" },
+    { "de": "orquestrador-mind", "para": "gateway-mind", "tipo": "aciona", "label": "fala/cognição (API)" },
+    { "de": "orquestrador-mind", "para": "motor-memoria-vetorial", "tipo": "aciona", "label": "busca híbrida" },
+    { "de": "motor-memoria-vetorial", "para": "ollama-local", "tipo": "depende-de", "label": "embeddings — liga sob demanda" },
+    { "de": "motor-memoria-vetorial", "para": "gateway-mind", "tipo": "depende-de", "label": "Postgres compartilhado" },
+    { "de": "mind-ingestor", "para": "gateway-mind", "tipo": "aciona", "label": "curadoria LLM" },
+    { "de": "studio-pecas", "para": "motor-memoria-vetorial", "tipo": "fluxo", "label": "peças: chunker, contrato de busca" }
+  ]
+}

@@ -18,6 +18,7 @@ export default function Painel() {
   const [detalhe, setDetalhe] = useState<DetalheNo | null>(null);
   const [svg, setSvg] = useState("");
   const [idsNos, setIdsNos] = useState<string[]>([]);
+  const [saude, setSaude] = useState<{ gateway: boolean; ollama: boolean; vetorial: { chunks: number | null } } | null>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +35,14 @@ export default function Painel() {
   }, []);
 
   useEffect(() => { carregarGrafo(); }, [carregarGrafo]);
+
+  // Monitor (Ollama liga sob demanda — o badge mostra quando a máquina está de pé)
+  useEffect(() => {
+    const checar = () => fetch("/api/saude").then((r) => r.json()).then(setSaude).catch(() => setSaude(null));
+    checar();
+    const t = setInterval(checar, 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // ---- Clique no nó: o id do nó vem no id do <g class="node"> gerado pelo Mermaid
   useEffect(() => {
@@ -87,8 +96,18 @@ export default function Painel() {
     <main style={{ display: "grid", gridTemplateColumns: "1fr 400px", height: "100vh" }}>
       {/* ---- Grafo ---- */}
       <section style={{ position: "relative", overflow: "auto", borderRight: "1px solid #232a45" }}>
-        <header style={{ padding: "12px 20px", position: "sticky", top: 0, background: "#0b1020ee", zIndex: 2 }}>
-          <b>🧠 Mind</b> <span style={{ opacity: 0.6, fontSize: 13 }}>— grafo (JSON é a verdade; clique num nó)</span>
+        <header style={{ padding: "12px 20px", position: "sticky", top: 0, background: "#0b1020ee", zIndex: 2,
+          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span><b>🧠 Mind</b> <span style={{ opacity: 0.6, fontSize: 13 }}>— grafo (JSON é a verdade; clique num nó)</span></span>
+          {saude && (
+            <span style={{ fontSize: 12, display: "flex", gap: 10 }}>
+              <span title="Gateway LLM (4101)">{saude.gateway ? "🟢" : "🔴"} gateway</span>
+              <span title="Ollama — embeddings; a máquina liga sob demanda">
+                {saude.ollama ? "🟢" : "⚪"} ollama{saude.ollama ? "" : " (desligado — busca lexical)"}
+              </span>
+              <span title="Chunks na memória vetorial (pgvector)">🧩 {saude.vetorial.chunks ?? "—"}</span>
+            </span>
+          )}
         </header>
         <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
           style={{ padding: 20, minHeight: "70vh", display: "flex", justifyContent: "center" }} />

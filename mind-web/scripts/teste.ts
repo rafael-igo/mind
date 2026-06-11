@@ -10,7 +10,10 @@ import { gerarMermaid } from "../lib/projecao.ts";
 import { parseOperacaoGrafo } from "../lib/grafo-editor.ts";
 
 // Testes são herméticos: nunca capturam no ingestor (senão cada rodada polui a memória recente)
+// e não dependem do Ollama/pgvector (a busca vetorial degrada para lexical quando indisponível).
 process.env.MIND_INGESTOR_URL = "";
+process.env.MIND_OLLAMA_URL = "http://127.0.0.1:9"; // porta fechada => ollamaDisponivel()=false
+process.env.MIND_VETOR_DB = "";
 
 function ok(cond: boolean, msg: string) {
   console.log(`${cond ? "✅" : "❌"} ${msg}`);
@@ -121,6 +124,11 @@ ok(r11.permitido && r11.resposta.includes("Grafo atualizado") && gDepois.nos.som
   "Fase 4 — aprovação aplica a operação: nó novo no JSON e o diagrama reorganiza");
 ok(gerarMermaid(gDepois).includes("rooming-list"),
   "Fase 4 — projeção Mermaid re-renderiza com o nó novo");
+
+// --- Memória vetorial: degradação silenciosa quando Ollama está desligado ---
+const { ollamaDisponivel, buscarVetorial } = await import("../lib/memoria-vetorial.ts");
+ok((await ollamaDisponivel(true)) === false && (await buscarVetorial("pendente aéreo")) === null,
+  "Vetorial — Ollama desligado → busca vetorial indisponível e Mind degrada para lexical");
 
 // Limpeza: desfaz a edição de teste no grafo e remove artefatos
 const arqGrafo = path.join(raiz, "grafo", "atendimento.json");

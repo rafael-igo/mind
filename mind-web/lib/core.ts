@@ -9,6 +9,7 @@ import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
 import { montarProposta } from "./motor-cognitivo.ts";
 import { criarProposta, decidirProposta, RANK_MINIMO_APROVACAO } from "./freio.ts";
 import { parseOperacaoGrafo, descreverOperacao } from "./grafo-editor.ts";
+import { buscarVetorial } from "./memoria-vetorial.ts";
 
 // ----------------------------- Tipos -----------------------------
 
@@ -529,6 +530,22 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   // Orquestrador: recupera memória relevante (limiar evita falso-positivo por 1 palavra solta)
   const LIMIAR = 2;
   const achados = buscar(input.texto, memoria).filter((a) => a.score >= LIMIAR);
+
+  // Busca HÍBRIDA: a vetorial (Ollama+pgvector) complementa a lexical quando disponível;
+  // Ollama desligado => null e a Mind segue só com a lexical (degradação silenciosa).
+  // podeVer() continua sendo aplicado DEPOIS — similaridade não fura permissão.
+  const vetoriais = await buscarVetorial(input.texto);
+  if (vetoriais) {
+    for (const v of vetoriais) {
+      if (v.score < 0.55) continue; // similaridade fraca não entra
+      const doc = memoria.find((d) => d.id === v.docId);
+      if (doc && !achados.some((a) => a.doc.id === doc.id)) {
+        achados.push({ doc, score: v.score * 8 }); // escala comparável à lexical
+      }
+    }
+    achados.sort((a, b) => b.score - a.score);
+  }
+
   if (achados.length === 0) {
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
