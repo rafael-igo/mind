@@ -67,9 +67,17 @@ simples**. O **teste da fase é o *definition of done*** — não passa para a p
   significado; similaridade **não fura permissão** (podeVer depois da busca); orquestrador responde
   via busca híbrida. 4/4 verde.
 
-### Fase 5 — Criatividade + Área do Criador
-- **Construir:** Motor de Criatividade / Resolução de Problemas (cognitivo, modelo forte) + a
-  Área do Criador (nível máximo + workspace dedicado).
+### Fase 5 — Criatividade + Área do Criador ✅ entregue 11/jun/2026
+- **Construir:** Motor de Criatividade / Resolução de Problemas
+  (`mind-web/lib/motor-criatividade.ts`) — o ÚNICO motor autorizado a pensar além da memória,
+  com hipóteses **rotuladas** (FATO × HIPÓTESE) e o modelo mais forte do nível (Fable 5).
+  Explorações vivem em `operacao/criatividade/` (workspace, invisível à busca); **promover**
+  uma exploração cria proposta que **PARA no freio**. Área do Criador no painel: workspace do
+  nível máximo (rank 100, checado server-side) com explorações abertas e propostas pendentes,
+  decisão em um clique.
+- **Teste (na suíte hermética, 7 casos):** operador é negado no motor e na promoção; exploração
+  NÃO vira memória direto; promover → freio; aprovação consolida pela única porta de escrita;
+  sem promoção dupla. Ciclo vivo validado com o gateway (Fable 5 rotulando fato × hipótese).
 
 ### Fase 6+ — Expansão de domínios
 - Credenciamento e demais plataformas; views cruzadas de cascata.

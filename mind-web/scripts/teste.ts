@@ -125,6 +125,40 @@ ok(r11.permitido && r11.resposta.includes("Grafo atualizado") && gDepois.nos.som
 ok(gerarMermaid(gDepois).includes("rooming-list"),
   "Fase 4 — projeção Mermaid re-renderiza com o nó novo");
 
+// --- Fase 5: Motor de Criatividade + Área do Criador ---
+const r12 = await orquestrar({ usuario: "operador-exemplo", texto: "tive uma ideia para melhorar o transfer dos convidados" }, raiz);
+ok(r12.modo === "negado" && !r12.permitido,
+  "Fase 5 — Motor de Criatividade é exclusivo da Área do Criador (operador NEGado)");
+
+const r13 = await orquestrar({ usuario: "rafael", texto: "brainstorm: como reduzir os atrasos no aéreo dos convidados?" }, raiz);
+const idExp = r13.contexto[0];
+ok(r13.modo === "criatividade" && !!idExp && r13.resposta.includes("HIPÓTESES"),
+  `Fase 5 — criador explora → exploração criada com abordagens rotuladas como hipótese (${idExp})`);
+ok(!carregarMemoria(raiz).some((d) => d.id === idExp),
+  "Fase 5 — exploração fica no workspace (operacao/criatividade), NÃO vira memória direto");
+
+const r14 = await orquestrar({ usuario: "operador-exemplo", texto: `promover exploracao ${idExp}` }, raiz);
+ok(r14.modo === "negado" && !r14.permitido,
+  "Fase 5 — operador NÃO promove exploração (nível máximo apenas)");
+
+const r15 = await orquestrar({ usuario: "rafael", texto: `promover exploracao ${idExp}` }, raiz);
+const idProp3 = r15.contexto[0];
+ok(r15.modo === "freio-proposta" && !!idProp3 && r15.resposta.includes("FREIO"),
+  `Fase 5 — promover exploração → proposta ${idProp3} criada e PARADA no freio`);
+
+const r16 = await orquestrar({ usuario: "rafael", texto: `aprovar proposta ${idProp3}` }, raiz);
+ok(r16.resposta.includes("APROVADA") && carregarMemoria(raiz).some((d) => d.id === `decisao-${idProp3}`),
+  "Fase 5 — aprovação consolida a exploração promovida na memória (única porta de escrita)");
+
+const r17 = await orquestrar({ usuario: "rafael", texto: `promover exploracao ${idExp}` }, raiz);
+ok(r17.resposta.includes("já foi promovida"),
+  "Fase 5 — exploração não pode ser promovida duas vezes");
+
+// Limpeza dos artefatos da Fase 5
+fs.rmSync(path.join(raiz, "operacao", "criatividade", `${idExp}.json`), { force: true });
+fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProp3}.json`), { force: true });
+fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProp3}.md`), { force: true });
+
 // --- Memória vetorial: degradação silenciosa quando Ollama está desligado ---
 const { ollamaDisponivel, buscarVetorial } = await import("../lib/memoria-vetorial.ts");
 ok((await ollamaDisponivel(true)) === false && (await buscarVetorial("pendente aéreo")) === null,

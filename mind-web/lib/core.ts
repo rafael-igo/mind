@@ -8,6 +8,9 @@ import path from "node:path";
 import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
 import { montarProposta } from "./motor-cognitivo.ts";
 import { criarProposta, decidirProposta, RANK_MINIMO_APROVACAO } from "./freio.ts";
+import {
+  explorar, salvarExploracao, carregarExploracao, rascunhoDePromocao, RANK_MINIMO_CRIADOR,
+} from "./motor-criatividade.ts";
 import { parseOperacaoGrafo, descreverOperacao } from "./grafo-editor.ts";
 import { buscarVetorial } from "./memoria-vetorial.ts";
 
@@ -76,7 +79,7 @@ export interface RespostaOrquestrador {
   rank: number;
   permitido: boolean;
   contexto: string[];
-  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao";
+  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao" | "criatividade";
   resposta: string;
 }
 
@@ -432,6 +435,17 @@ function parseComandoFreio(texto: string): { decisao: "aprovada" | "rejeitada"; 
   return { decisao: m[1] === "aprovar" ? "aprovada" : "rejeitada", id: m[2] };
 }
 
+/** Roteamento (Fase 5): o texto pede EXPLORAÇÃO CRIATIVA (pensar além da memória)? */
+function pedeCriatividade(texto: string): boolean {
+  return /(brainstorm|ideia|inventar|criatividade|pensar fora|do zero|e se a gente)/.test(normalizar(texto));
+}
+
+/** Comando da Área do Criador: "promover exploracao <id>" → vira proposta no freio. */
+function parseComandoPromover(texto: string): { id: string } | null {
+  const m = normalizar(texto).match(/\bpromover\s+exploracao\s+([a-z0-9-]+)/);
+  return m ? { id: m[1] } : null;
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -482,6 +496,77 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: [p.id], modo: "freio-decisao", resposta,
+    };
+  }
+
+  // Fase 5 — Área do Criador: promover exploração => vira proposta formal e PARA no freio.
+  const cmdPromover = parseComandoPromover(input.texto);
+  if (cmdPromover) {
+    if (rank < RANK_MINIMO_CRIADOR) {
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank, permitido: false,
+        contexto: [cmdPromover.id], modo: "negado",
+        resposta: "Promover explorações é exclusivo da Área do Criador (nível máximo).",
+      };
+    }
+    const exp = carregarExploracao(raiz, cmdPromover.id);
+    if (!exp) {
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+        contexto: [], modo: "criatividade",
+        resposta: `Não encontrei a exploração ${cmdPromover.id} na Área do Criador.`,
+      };
+    }
+    if (exp.status !== "aberta") {
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+        contexto: [cmdPromover.id], modo: "criatividade",
+        resposta: `A exploração ${exp.id} já foi ${exp.status}${exp.propostaId ? ` (proposta ${exp.propostaId})` : ""}.`,
+      };
+    }
+    const proposta = criarProposta(raiz, rascunhoDePromocao(exp, carregarGrafo(raiz)));
+    exp.status = "promovida";
+    exp.propostaId = proposta.id;
+    salvarExploracao(raiz, exp);
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [proposta.id], modo: "freio-proposta",
+      resposta:
+        `🎨→🧠 Exploração ${exp.id} promovida: proposta ${proposta.id} criada e PARADA NO FREIO ` +
+        `(nada foi alterado).\n\nPara decidir (diretor+): "aprovar proposta ${proposta.id}" ou ` +
+        `"rejeitar proposta ${proposta.id}".`,
+    };
+  }
+
+  // Fase 5 — Motor de Criatividade: o único que pensa ALÉM da memória (só nível máximo).
+  if (pedeCriatividade(input.texto)) {
+    if (rank < RANK_MINIMO_CRIADOR) {
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank, permitido: false,
+        contexto: [], modo: "negado",
+        resposta: "O Motor de Criatividade é exclusivo da Área do Criador (nível máximo).",
+      };
+    }
+    const exploracao = await explorar({
+      problema: input.texto,
+      autor: usuario.id,
+      grafo: carregarGrafo(raiz),
+      memoria: memoria.filter((d) => podeVer(perm, usuario, d.sensibilidade, d.tags)),
+      buscarDocs: buscar,
+      // nível máximo => modelo mais forte (Fable 5) decidido por modeloParaNivel
+      chamarLlm: (sistema, texto) => chamarGateway(sistema, texto, modeloParaNivel(usuario.nivel)),
+    });
+    salvarExploracao(raiz, exploracao);
+    const resposta =
+      `🎨 Exploração ${exploracao.id} criada na Área do Criador (hipóteses — nada vira verdade sem freio).\n\n` +
+      `${exploracao.texto}\n\nAbordagens:\n` +
+      exploracao.abordagens.map((a) => `- ${a.titulo}: ${a.descricao} (risco: ${a.risco})`).join("\n") +
+      `\n\nPerguntas em aberto:\n` +
+      exploracao.perguntas.map((q) => `- ${q}`).join("\n") +
+      `\n\nPara levar adiante: "promover exploracao ${exploracao.id}" (vira proposta e PARA no freio).`;
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [exploracao.id], modo: "criatividade", resposta,
     };
   }
 

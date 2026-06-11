@@ -30,7 +30,7 @@ Next.js + TypeScript (API + interface num projeto só). Núcleo do cérebro em
 
 ## Estado
 
-Conceito fechado. **Fases 0–4.5 implementadas e testadas** (20/20 hermético + 4/4 vetorial vivo):
+Conceito fechado. **Fases 0–5 implementadas e testadas** (27/27 hermético + 4/4 vetorial vivo):
 
 - **F0/F1** — grafo carrega/valida; orquestrador recupera memória, respeita permissão e não
   inventa sem registro. Memória em camadas: `recente/` (episódica), `profunda/` (semântica),
@@ -42,6 +42,15 @@ Conceito fechado. **Fases 0–4.5 implementadas e testadas** (20/20 hermético +
   em `operacao/propostas/` (`lib/freio.ts`). Só **diretor+ (rank ≥ 50)** decide; aprovada,
   consolida em `memoria/recente/decisao-*.md` — única porta de escrita na memória pelo ciclo
   cognitivo. Comandos: `aprovar proposta <id>` / `rejeitar proposta <id>`.
+- **F4** — **Painel**: grafo Mermaid clicável (projeção do JSON) + chat lateral + monitor de
+  saúde (gateway/Ollama/chunks); edição do grafo pelo chat vira proposta no freio.
+- **F4.5** — **Memória vetorial**: Ollama (`nomic-embed-text`) + pgvector, busca híbrida com
+  degradação para lexical; `podeVer()` sempre DEPOIS da busca.
+- **F5** — **Criatividade + Área do Criador**: `lib/motor-criatividade.ts` é o único motor que
+  pensa **além da memória** (hipóteses rotuladas, modelo forte). Explorações ficam em
+  `operacao/criatividade/` (workspace — não viram memória); `promover exploracao <id>` cria
+  proposta que para no freio. No painel, a **Área do Criador** (rank 100, checado server-side)
+  lista explorações e propostas pendentes com decisão em um clique.
 
 LLM real via **gateway exclusivo da Mind** (branch `mind-gateway` do igo-ai-gateway, porta 4101,
 **Postgres no Docker** no lugar do Supabase): o `chamarGateway` detecta a chave `tnt_*`; **o
@@ -51,6 +60,7 @@ diretor→Opus 4.8, criador→Fable 5).
 Rodar: `cd mind-web && npm install && npm run teste` (offline) ou
 `node --env-file=.env --experimental-strip-types scripts/teste.ts` (com gateway).
 
-Pendências suas: confirmar definição de **pendente aéreo** e os valores do **SLA** (os do motor
-são os provisórios de `memoria/profunda/sla-rsvp.md`). Depois → Fase 4 (interface visual: grafo
-clicável + chat).
+Pendências suas: oficializar os valores de **SLA de resposta** (2h/8h/24h, proposta em
+`memoria/profunda/sla-igo-oficial.md`) e validar os **papéis RACI** no grafo (checkboxes em
+`memoria/_MAPA`). Próximo do plano → Fase 6+ (expansão de domínios: credenciamento e demais
+plataformas, views cruzadas de cascata).

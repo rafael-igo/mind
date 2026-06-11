@@ -1,5 +1,5 @@
 {
-  "versao": "0.2.0",
+  "versao": "0.3.0",
   "dominio": "mind-plataforma",
   "atualizado_em": "2026-06-11",
   "nos": [
@@ -60,6 +60,26 @@
       ]
     },
     {
+      "id": "motor-criatividade",
+      "tipo": "motor",
+      "titulo": "Motor de Criatividade",
+      "descricao": "O único motor autorizado a pensar ALÉM da memória: gera hipóteses e abordagens (rotuladas) com o modelo mais forte. Nada vira verdade: promover exploração cria proposta que PARA no freio.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": []
+    },
+    {
+      "id": "area-do-criador",
+      "tipo": "modulo",
+      "titulo": "Área do Criador",
+      "descricao": "Workspace do nível máximo (rank 100): explorações criativas abertas e propostas paradas no freio, com decisão em um clique. Checagem de nível é server-side.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "confidencial",
+      "status": "ativo",
+      "memoria": []
+    },
+    {
       "id": "mind-ingestor",
       "tipo": "modulo",
       "titulo": "Motor de Memória (mind-ingestor)",
@@ -109,10 +129,38 @@
       "tipo": "contem"
     },
     {
+      "de": "mind-plataforma",
+      "para": "motor-criatividade",
+      "tipo": "contem"
+    },
+    {
+      "de": "mind-plataforma",
+      "para": "area-do-criador",
+      "tipo": "contem"
+    },
+    {
       "de": "orquestrador-mind",
       "para": "gateway-mind",
       "tipo": "aciona",
       "label": "fala/cognição (API)"
+    },
+    {
+      "de": "orquestrador-mind",
+      "para": "motor-criatividade",
+      "tipo": "aciona",
+      "label": "só nível máximo (rank 100)"
+    },
+    {
+      "de": "area-do-criador",
+      "para": "motor-criatividade",
+      "tipo": "aciona",
+      "label": "explorar → promover → freio"
+    },
+    {
+      "de": "motor-criatividade",
+      "para": "gateway-mind",
+      "tipo": "depende-de",
+      "label": "modelo forte (Fable 5)"
     },
     {
       "de": "orquestrador-mind",

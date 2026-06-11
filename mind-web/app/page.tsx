@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const USUARIOS = ["rafael", "diretor-exemplo", "rh-exemplo", "operador-exemplo"];
 
 interface Mensagem { de: "eu" | "mind"; texto: string; meta?: string }
+interface AreaCriador {
+  exploracoes: { id: string; problema: string; criadaEm: string; abordagens: number }[];
+  propostasPendentes: { id: string; pedido: string; autor: string; criadaEm: string; noAlvo: string }[];
+}
 interface DetalheNo {
   no: { id: string; tipo: string; titulo: string; descricao?: string; sensibilidade: string; status: string };
   arestas: { de: string; para: string; tipo: string; label?: string }[];
@@ -19,8 +23,21 @@ export default function Painel() {
   const [svg, setSvg] = useState("");
   const [idsNos, setIdsNos] = useState<string[]>([]);
   const [saude, setSaude] = useState<{ gateway: boolean; ollama: boolean; vetorial: { chunks: number | null } } | null>(null);
+  const [criador, setCriador] = useState<AreaCriador | null>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  // ---- Área do Criador (Fase 5): o servidor decide quem entra; 403 => painel some
+  const carregarCriador = useCallback(async (u: string) => {
+    try {
+      const r = await fetch(`/api/criador?usuario=${encodeURIComponent(u)}`);
+      setCriador(r.ok ? await r.json() : null);
+    } catch {
+      setCriador(null);
+    }
+  }, []);
+
+  useEffect(() => { carregarCriador(usuario); }, [usuario, carregarCriador]);
 
   // ---- Grafo: busca JSON+Mermaid e renderiza (o diagrama é projeção, regenerada a cada mudança)
   const carregarGrafo = useCallback(async () => {
@@ -65,11 +82,11 @@ export default function Painel() {
     return () => handlers.forEach(({ n, fn }) => n.removeEventListener("click", fn));
   }, [svg, idsNos]);
 
-  // ---- Chat
-  async function enviar() {
-    const pergunta = texto.trim();
+  // ---- Chat (os botões da Área do Criador passam pelo MESMO orquestrador via `comando`)
+  async function enviar(comando?: string) {
+    const pergunta = (comando ?? texto).trim();
     if (!pergunta || pensando) return;
-    setTexto("");
+    if (!comando) setTexto("");
     setMensagens((m) => [...m, { de: "eu", texto: pergunta }]);
     setPensando(true);
     try {
@@ -86,6 +103,8 @@ export default function Painel() {
       }]);
       // Se a Mind mudou a verdade (decisão aprovada), o diagrama reorganiza sozinho
       if (j.modo === "freio-decisao" || j.modo === "freio-proposta") await carregarGrafo();
+      // Workspace do criador acompanha o ciclo: explorar → promover → decidir
+      if (["criatividade", "freio-proposta", "freio-decisao"].includes(j.modo)) await carregarCriador(usuario);
     } finally {
       setPensando(false);
       setTimeout(() => chatRef.current?.scrollTo({ top: 1e9, behavior: "smooth" }), 50);
@@ -150,6 +169,42 @@ export default function Painel() {
             {USUARIOS.map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
         </header>
+
+        {/* ---- Área do Criador (Fase 5): workspace do nível máximo — o servidor barra, aqui só mostra */}
+        {criador && (
+          <div style={{ padding: 12, borderBottom: "1px solid #232a45", background: "#12172b", maxHeight: "32vh", overflow: "auto" }}>
+            <b style={{ fontSize: 13 }}>🎨 Área do Criador</b>
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              <b style={{ opacity: 0.8 }}>Explorações abertas</b>
+              {criador.exploracoes.length === 0 && <div style={{ opacity: 0.5 }}>nenhuma — peça um brainstorm no chat</div>}
+              {criador.exploracoes.map((e) => (
+                <div key={e.id} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  <span style={{ flex: 1, opacity: 0.85 }} title={e.id}>💡 {e.problema.slice(0, 60)}</span>
+                  <button onClick={() => enviar(`promover exploracao ${e.id}`)} disabled={pensando}
+                    style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#6366f1", color: "white", cursor: "pointer" }}>
+                    promover
+                  </button>
+                </div>
+              ))}
+              <b style={{ opacity: 0.8, display: "block", marginTop: 8 }}>Propostas no freio</b>
+              {criador.propostasPendentes.length === 0 && <div style={{ opacity: 0.5 }}>nenhuma pendente</div>}
+              {criador.propostasPendentes.map((p) => (
+                <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  <span style={{ flex: 1, opacity: 0.85 }} title={`${p.id} · alvo: ${p.noAlvo}`}>🧠 {p.pedido.slice(0, 60)}</span>
+                  <button onClick={() => enviar(`aprovar proposta ${p.id}`)} disabled={pensando}
+                    style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#16a34a", color: "white", cursor: "pointer" }}>
+                    aprovar
+                  </button>
+                  <button onClick={() => enviar(`rejeitar proposta ${p.id}`)} disabled={pensando}
+                    style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#dc2626", color: "white", cursor: "pointer" }}>
+                    rejeitar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div ref={chatRef} style={{ flex: 1, overflow: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
           {mensagens.length === 0 && (
             <div style={{ opacity: 0.55, fontSize: 13, lineHeight: 1.7 }}>
@@ -158,6 +213,7 @@ export default function Painel() {
               · quais convidados estão estourando o SLA?<br />
               · cliente quer alterar o controle de salas<br />
               · adicionar nó modulo "Rooming List"<br />
+              · brainstorm: como reduzir atrasos no aéreo? <i style={{ opacity: 0.6 }}>(Área do Criador)</i><br />
               · aprovar proposta &lt;id&gt;
             </div>
           )}
@@ -176,7 +232,7 @@ export default function Painel() {
             onKeyDown={(e) => e.key === "Enter" && enviar()}
             placeholder="Fale com a Mind…"
             style={{ flex: 1, padding: 10, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }} />
-          <button onClick={enviar} disabled={pensando}
+          <button onClick={() => enviar()} disabled={pensando}
             style={{ padding: "10px 16px", borderRadius: 8, border: 0, background: "#6366f1", color: "white", cursor: "pointer" }}>
             ➤
           </button>
