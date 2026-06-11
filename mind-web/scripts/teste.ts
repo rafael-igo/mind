@@ -1,8 +1,10 @@
 /**
- * Teste das Fases 0, 1 e 2 (roda sem servidor):
+ * Teste das Fases 0, 1, 2 e 3 (roda sem servidor):
  *   node --experimental-strip-types scripts/teste.ts
  */
-import { carregarGrafo, orquestrar, resolverDadosRaiz } from "../lib/core.ts";
+import fs from "node:fs";
+import path from "node:path";
+import { carregarGrafo, carregarMemoria, orquestrar, resolverDadosRaiz } from "../lib/core.ts";
 import { calcularSla } from "../lib/motor-sla.ts";
 
 function ok(cond: boolean, msg: string) {
@@ -61,4 +63,33 @@ ok(
 const r5 = await orquestrar({ usuario: "operador-exemplo", texto: "quais convidados estão estourando o SLA?" }, raiz);
 ok(r5.modo === "motor-sla" && r5.resposta.includes("Motor de SLA"),
   "Fase 2 — orquestrador roteia pergunta de SLA para o motor (LLM roteia, código calcula)");
-console.log("   →", r5.resposta);
+console.log("   →", r5.resposta, "\n");
+
+// --- Fase 3: Cognição + Freio ---
+const r6 = await orquestrar({ usuario: "operador-exemplo", texto: "cliente quer alterar o controle de salas do evento" }, raiz);
+const idProposta = r6.contexto[0];
+ok(r6.modo === "freio-proposta" && !!idProposta && r6.resposta.includes("FREIO"),
+  `Fase 3 — pedido de mudança → motor cognitivo propõe e PARA no freio (${idProposta})`);
+ok(!carregarMemoria(raiz).some((d) => d.id === `decisao-${idProposta}`),
+  "Fase 3 — antes da aprovação, NADA foi consolidado na memória");
+
+const r7 = await orquestrar({ usuario: "operador-exemplo", texto: `aprovar proposta ${idProposta}` }, raiz);
+ok(r7.modo === "freio-decisao" && !r7.permitido,
+  "Fase 3 — operador NÃO pode aprovar (freio exige diretor+)");
+console.log("   →", r7.resposta);
+
+const r8 = await orquestrar({ usuario: "rafael", texto: `aprovar proposta ${idProposta}` }, raiz);
+ok(r8.modo === "freio-decisao" && r8.permitido && r8.resposta.includes("APROVADA"),
+  "Fase 3 — criador aprova → freio libera");
+console.log("   →", r8.resposta);
+
+ok(carregarMemoria(raiz).some((d) => d.id === `decisao-${idProposta}`),
+  "Fase 3 — decisão aprovada CONSOLIDADA na memória (camada recente)");
+
+const r9 = await orquestrar({ usuario: "rafael", texto: `aprovar proposta ${idProposta}` }, raiz);
+ok(!r9.resposta.includes("APROVADA") && r9.resposta.includes("já foi decidida"),
+  "Fase 3 — proposta não pode ser decidida duas vezes");
+
+// Limpeza: artefatos criados pelo teste não viram estado permanente
+fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProposta}.json`), { force: true });
+fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProposta}.md`), { force: true });

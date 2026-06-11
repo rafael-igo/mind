@@ -1,5 +1,6 @@
 ---
 id: sla-rsvp
+comunidade: profunda
 titulo: SLA de Atendimento RSVP
 tipo: regra
 dominio: atendimento-rsvp

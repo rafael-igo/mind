@@ -1,5 +1,6 @@
 ---
 id: papel-operador
+comunidade: profunda
 titulo: Operador de Atendimento RSVP
 tipo: papel
 dominio: atendimento-rsvp

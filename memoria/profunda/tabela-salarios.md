@@ -1,5 +1,6 @@
 ---
 id: tabela-salarios
+comunidade: profunda
 titulo: Tabela de Salários (exemplo confidencial)
 tipo: doc-dev
 dominio: rh

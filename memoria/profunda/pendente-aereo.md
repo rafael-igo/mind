@@ -1,5 +1,6 @@
 ---
 id: pendente-aereo
+comunidade: profunda
 titulo: Pendente Aéreo
 tipo: conceito
 dominio: atendimento-rsvp

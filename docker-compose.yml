@@ -7,7 +7,7 @@ services:
       MIND_DADOS: /data
       MIND_LLM_BASE_URL: ${MIND_LLM_BASE_URL:-}
       MIND_LLM_API_KEY: ${MIND_LLM_API_KEY:-}
-      MIND_LLM_MODEL: ${MIND_LLM_MODEL:-gpt-4o-mini}
+      MIND_LLM_MODEL: ${MIND_LLM_MODEL:-claude-haiku-4-5}
     volumes:
       # Monta o repositório (grafo/ memoria/ permissoes/) como dados — leitura.
       - ./grafo:/data/grafo:ro

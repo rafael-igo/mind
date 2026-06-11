@@ -6,6 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
+import { montarProposta } from "./motor-cognitivo.ts";
+import { criarProposta, decidirProposta, RANK_MINIMO_APROVACAO } from "./freio.ts";
 
 // ----------------------------- Tipos -----------------------------
 
@@ -39,6 +41,8 @@ export interface DocMemoria {
   id: string;
   titulo: string;
   tipo: string;
+  /** Camada de memória: "recente" (episódica), "profunda" (semântica) ou "raiz"/nome da subpasta. */
+  comunidade: string;
   sensibilidade: Sensibilidade;
   tags: string[];
   corpo: string;
@@ -70,7 +74,7 @@ export interface RespostaOrquestrador {
   rank: number;
   permitido: boolean;
   contexto: string[];
-  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla";
+  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao";
   resposta: string;
 }
 
@@ -178,27 +182,40 @@ export function fontesMemoria(raiz = resolverDadosRaiz()): string[] {
 
 const IGNORAR = new Set(["readme.md"]);
 
+/** Subpastas-comunidade de uma fonte de memória. Prefixo _ (ex.: _inbox) é pré-memória: invisível. */
+function comunidadesDe(dir: string): { nome: string; dir: string }[] {
+  const out = [{ nome: "raiz", dir }];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory() && !e.name.startsWith("_") && !e.name.startsWith("."))
+      out.push({ nome: e.name, dir: path.join(dir, e.name) });
+  }
+  return out;
+}
+
 export function carregarMemoria(raiz = resolverDadosRaiz()): DocMemoria[] {
   const docs: DocMemoria[] = [];
   const vistos = new Set<string>();
-  for (const dir of fontesMemoria(raiz)) {
-    const arquivos = fs.readdirSync(dir)
-      .filter((f) => f.endsWith(".md") && !f.startsWith("_") && !IGNORAR.has(f.toLowerCase()));
-    for (const f of arquivos) {
-      const { meta, corpo } = parseFrontmatter(fs.readFileSync(path.join(dir, f), "utf8"));
-      if (!corpo.trim()) continue; // ignora arquivos sem corpo/frontmatter útil
-      const id = meta.id || f.replace(/\.md$/, "");
-      if (vistos.has(id)) continue; // a memória própria da Mind tem precedência
-      vistos.add(id);
-      docs.push({
-        id,
-        titulo: meta.titulo || f,
-        tipo: meta.tipo || meta.categoria || "conceito",
-        sensibilidade: normalizarSensibilidade(meta.sensibilidade),
-        tags: parseLista(meta.tags),
-        corpo,
-        arquivo: path.join(dir, f),
-      });
+  for (const fonte of fontesMemoria(raiz)) {
+    for (const com of comunidadesDe(fonte)) {
+      const arquivos = fs.readdirSync(com.dir)
+        .filter((f) => f.endsWith(".md") && !f.startsWith("_") && !IGNORAR.has(f.toLowerCase()));
+      for (const f of arquivos) {
+        const { meta, corpo } = parseFrontmatter(fs.readFileSync(path.join(com.dir, f), "utf8"));
+        if (!corpo.trim()) continue; // ignora arquivos sem corpo/frontmatter útil
+        const id = meta.id || f.replace(/\.md$/, "");
+        if (vistos.has(id)) continue; // a memória própria da Mind tem precedência
+        vistos.add(id);
+        docs.push({
+          id,
+          titulo: meta.titulo || f,
+          tipo: meta.tipo || meta.categoria || "conceito",
+          comunidade: meta.comunidade || com.nome,
+          sensibilidade: normalizarSensibilidade(meta.sensibilidade),
+          tags: parseLista(meta.tags),
+          corpo,
+          arquivo: path.join(com.dir, f),
+        });
+      }
     }
   }
   return docs;
@@ -297,7 +314,7 @@ export function modeloParaNivel(nivel: string): string | undefined {
 export async function chamarGateway(sistema: string, usuario: string, modeloPedido?: string): Promise<string | null> {
   const base = process.env.MIND_LLM_BASE_URL;
   const key = process.env.MIND_LLM_API_KEY;
-  const modelo = modeloPedido || process.env.MIND_LLM_MODEL || "gpt-4o-mini";
+  const modelo = modeloPedido || process.env.MIND_LLM_MODEL || "claude-haiku-4-5";
   if (!base) return null;
   const raiz = base.replace(/\/$/, "");
   try {
@@ -364,6 +381,18 @@ function pedeMotorSla(texto: string): boolean {
   return /\bsla\b/.test(t) && /(estour|venc|atras|prazo)/.test(t);
 }
 
+/** Roteamento determinístico: o texto é um PEDIDO DE MUDANÇA (vai para o motor cognitivo + freio)? */
+function pedeMudanca(texto: string): boolean {
+  return /(alterar|mudar|mudanca|trocar|ajustar|atualizar|remover|adicionar|incluir)/.test(normalizar(texto));
+}
+
+/** Comando de decisão do freio: "aprovar proposta <id>" | "rejeitar proposta <id>". */
+function parseComandoFreio(texto: string): { decisao: "aprovada" | "rejeitada"; id: string } | null {
+  const m = normalizar(texto).match(/\b(aprovar|rejeitar)\s+proposta\s+([a-z0-9-]+)/);
+  if (!m) return null;
+  return { decisao: m[1] === "aprovar" ? "aprovada" : "rejeitada", id: m[2] };
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -389,6 +418,32 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   }
   const rank = rankDe(perm, usuario.nivel);
 
+  // Fase 3 — decisão do freio: aprovar/rejeitar proposta (só diretor/criador muda a verdade).
+  const cmdFreio = parseComandoFreio(input.texto);
+  if (cmdFreio) {
+    const r = decidirProposta(raiz, cmdFreio.id, cmdFreio.decisao, { id: usuario.id, nivel: usuario.nivel, rank });
+    if (!r.ok) {
+      const msgs = {
+        "nao-encontrada": `Não encontrei a proposta ${cmdFreio.id}.`,
+        "ja-decidida": `A proposta ${cmdFreio.id} já foi decidida (${r.proposta?.status}).`,
+        "rank-insuficiente": `O freio exige nível diretor ou acima (rank >= ${RANK_MINIMO_APROVACAO}) para decidir propostas.`,
+      } as const;
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank,
+        permitido: r.erro !== "rank-insuficiente",
+        contexto: [cmdFreio.id], modo: "freio-decisao", resposta: msgs[r.erro!],
+      };
+    }
+    const p = r.proposta!;
+    const resposta = p.status === "aprovada"
+      ? `Proposta ${p.id} APROVADA por ${p.decididaPor}. Decisão consolidada na memória (decisao-${p.id}).`
+      : `Proposta ${p.id} rejeitada por ${p.decididaPor}. Nada foi alterado.`;
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [p.id], modo: "freio-decisao", resposta,
+    };
+  }
+
   // Fase 2 — motor determinístico: a LLM (ou o roteador) decide QUEM responde; o código calcula.
   if (pedeMotorSla(input.texto)) {
     const resultados = calcularSla(carregarPendencias(raiz));
@@ -396,6 +451,32 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: ["motor-sla"], modo: "motor-sla",
       resposta: resumirSla(resultados),
+    };
+  }
+
+  // Fase 3 — pedido de mudança: motor cognitivo raciocina a cascata e a proposta PARA no freio.
+  if (pedeMudanca(input.texto)) {
+    const grafo = carregarGrafo(raiz);
+    const rascunho = await montarProposta({
+      pedido: input.texto,
+      autor: usuario.id,
+      nivel: usuario.nivel,
+      grafo,
+      memoria: memoria.filter((d) => podeVer(perm, usuario, d.sensibilidade, d.tags)),
+      buscarDocs: buscar,
+      chamarLlm: (sistema, texto) => chamarGateway(sistema, texto, modeloParaNivel(usuario.nivel)),
+    });
+    const proposta = criarProposta(raiz, rascunho);
+    const resposta =
+      `🧠 Proposta ${proposta.id} criada e PARADA NO FREIO (nada foi alterado).\n\n` +
+      `Nó-alvo: ${proposta.tituloAlvo} (${proposta.noAlvo})\n` +
+      `Cascata: ${proposta.cascata.length ? proposta.cascata.map((c) => c.titulo).join(", ") : "nenhuma"}\n\n` +
+      `${proposta.propostaTexto}\n\nPerguntas em aberto:\n` +
+      proposta.perguntas.map((q) => `- ${q}`).join("\n") +
+      `\n\nPara decidir (diretor+): "aprovar proposta ${proposta.id}" ou "rejeitar proposta ${proposta.id}".`;
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [proposta.id], modo: "freio-proposta", resposta,
     };
   }
 

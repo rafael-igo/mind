@@ -30,18 +30,27 @@ Next.js + TypeScript (API + interface num projeto só). Núcleo do cérebro em
 
 ## Estado
 
-Conceito fechado. **Fases 0, 1 e 2 implementadas e testadas** (6/6 verde): grafo carrega/valida,
-orquestrador recupera memória, respeita permissão (nega operador no confidencial, libera criador),
-não inventa sem registro, e o **Motor de SLA** (`mind-web/lib/motor-sla.ts`, determinístico — a
-LLM roteia, o código calcula) classifica prioridade/estouro a partir de `operacao/pendencias*.json`.
-O motor está em TS dentro da espinha; extração para .NET fica para quando virar serviço.
+Conceito fechado. **Fases 0–3 implementadas e testadas** (13/13 verde):
 
-LLM real via **igo-ai-gateway** (tenant `mind`, `localhost:4100`, contrato `/v1/batch`): o
-`chamarGateway` detecta a chave `tnt_*`; **o modelo é escolhido pelo nível do usuário**
-(operador→Haiku 4.5, coordenador/RH→Sonnet 4.6, diretor→Opus 4.8, criador→Fable 5).
+- **F0/F1** — grafo carrega/valida; orquestrador recupera memória, respeita permissão e não
+  inventa sem registro. Memória em camadas: `recente/` (episódica), `profunda/` (semântica),
+  `_inbox/` (pré-memória, invisível).
+- **F2** — **Motor de SLA** (`lib/motor-sla.ts`, determinístico — a LLM roteia, o código calcula)
+  classifica prioridade/estouro a partir de `operacao/pendencias*.json`.
+- **F3** — **Cognição + Freio**: pedido de mudança → `lib/motor-cognitivo.ts` acha o nó-alvo,
+  raciocina a **cascata** pelas arestas do grafo e redige proposta + perguntas → a proposta PARA
+  em `operacao/propostas/` (`lib/freio.ts`). Só **diretor+ (rank ≥ 50)** decide; aprovada,
+  consolida em `memoria/recente/decisao-*.md` — única porta de escrita na memória pelo ciclo
+  cognitivo. Comandos: `aprovar proposta <id>` / `rejeitar proposta <id>`.
+
+LLM real via **gateway exclusivo da Mind** (branch `mind-gateway` do igo-ai-gateway, porta 4101,
+**Postgres no Docker** no lugar do Supabase): o `chamarGateway` detecta a chave `tnt_*`; **o
+modelo é escolhido pelo nível do usuário** (operador→Haiku 4.5, coordenador/RH→Sonnet 4.6,
+diretor→Opus 4.8, criador→Fable 5).
 
 Rodar: `cd mind-web && npm install && npm run teste` (offline) ou
 `node --env-file=.env --experimental-strip-types scripts/teste.ts` (com gateway).
 
 Pendências suas: confirmar definição de **pendente aéreo** e os valores do **SLA** (os do motor
-são os provisórios de `memoria/sla-rsvp.md`). Depois → Fase 3 (cognição + freio).
+são os provisórios de `memoria/profunda/sla-rsvp.md`). Depois → Fase 4 (interface visual: grafo
+clicável + chat).

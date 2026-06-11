@@ -80,11 +80,21 @@
       "id": "motor-sla",
       "tipo": "motor",
       "titulo": "Motor de SLA",
-      "descricao": "Determinístico (.NET): dada lista/data, calcula prazo e prioridade. (Fase 2)",
+      "descricao": "Determinístico (TypeScript na espinha, extraível p/ .NET): dada lista/data, calcula prazo e prioridade. (Fase 2)",
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
-      "status": "planejado",
+      "status": "ativo",
       "memoria": ["sla-rsvp"]
+    },
+    {
+      "id": "controle-de-salas",
+      "tipo": "modulo",
+      "titulo": "Controle de Salas",
+      "descricao": "Alocação e controle de salas/espaços do evento (capacidade, sessões, acessos).",
+      "dominio": "atendimento-rsvp",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": []
     }
   ],
   "arestas": [
@@ -97,6 +107,8 @@
     { "de": "papel-consultor", "para": "papel-especialista", "tipo": "escala-para", "label": "caso técnico" },
     { "de": "papel-especialista", "para": "papel-coordenador", "tipo": "escala-para", "label": "exceção/decisão" },
     { "de": "papel-operador", "para": "bloco-sla-rsvp", "tipo": "depende-de" },
-    { "de": "papel-operador", "para": "motor-sla", "tipo": "aciona", "label": "calcular prazo" }
+    { "de": "papel-operador", "para": "motor-sla", "tipo": "aciona", "label": "calcular prazo" },
+    { "de": "atendimento-rsvp", "para": "controle-de-salas", "tipo": "contem" },
+    { "de": "papel-operador", "para": "controle-de-salas", "tipo": "depende-de", "label": "consulta alocação" }
   ]
 }
