@@ -1,0 +1,18 @@
+{
+  "descricao": "Níveis de acesso da Mind. 'rank' maior vê tudo de rank menor ou igual.",
+  "niveis": [
+    { "id": "operador",   "rank": 10, "titulo": "Operador" },
+    { "id": "consultor",  "rank": 20, "titulo": "Consultor / Especialista" },
+    { "id": "coordenador","rank": 30, "titulo": "Coordenador" },
+    { "id": "rh",         "rank": 40, "titulo": "RH", "observacao": "acesso a dados de pessoas/financeiro de pessoal" },
+    { "id": "diretor",    "rank": 50, "titulo": "Diretor" },
+    { "id": "criador",    "rank": 100, "titulo": "Criador / Sócio", "observacao": "acesso máximo + Área do Criador" }
+  ],
+  "sensibilidade_para_rank_minimo": {
+    "publico": 0,
+    "interno": 10,
+    "restrito": 30,
+    "confidencial": 50
+  },
+  "regra": "Pode acessar um nó/documento se rank_do_usuario >= sensibilidade_para_rank_minimo[sensibilidade]. Exceções por tag (ex.: 'pessoas') podem exigir nível específico (rh) independente do rank — tratado no orquestrador de input."
+}

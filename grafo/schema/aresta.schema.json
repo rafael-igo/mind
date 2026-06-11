@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mind/grafo/aresta.schema.json",
+  "title": "Aresta da Mind",
+  "description": "Ligação entre dois nós (sinapse).",
+  "type": "object",
+  "required": ["de", "para", "tipo"],
+  "additionalProperties": false,
+  "properties": {
+    "de": { "type": "string", "description": "id do nó de origem" },
+    "para": { "type": "string", "description": "id do nó de destino" },
+    "tipo": {
+      "type": "string",
+      "enum": ["contem", "fluxo", "escala-para", "delega-para", "depende-de", "aciona"],
+      "description": "contem=domínio→filho; escala/delega=cascata entre papéis; aciona=papel/orquestrador→motor."
+    },
+    "label": { "type": "string", "description": "Rótulo opcional exibido na aresta." }
+  }
+}

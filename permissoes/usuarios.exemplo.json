@@ -1,0 +1,9 @@
+{
+  "descricao": "Usuários de exemplo para testar o orquestrador de input (Fase 0/1). Sem senhas aqui — autenticação real virá depois.",
+  "usuarios": [
+    { "id": "rafael", "nome": "Rafael", "nivel": "criador" },
+    { "id": "diretor-exemplo", "nome": "Diretor Exemplo", "nivel": "diretor" },
+    { "id": "rh-exemplo", "nome": "RH Exemplo", "nivel": "rh", "tags": ["pessoas"] },
+    { "id": "operador-exemplo", "nome": "Operador Exemplo", "nivel": "operador" }
+  ]
+}

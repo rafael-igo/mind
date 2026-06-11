@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# dependências e build
+node_modules/
+.next/
+out/
+
+# ambiente (segredos)
+.env
+.env.local
+.env*.local
+
+# logs
+*.log
+
+# saídas geradas pelo graphify (regenerável com /graphify)
+graphify-out/

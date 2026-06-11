@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mind/grafo/no.schema.json",
+  "title": "Nó da Mind",
+  "description": "Unidade do grafo (fonte da verdade). O Mermaid é projeção disto.",
+  "type": "object",
+  "required": ["id", "tipo", "titulo", "sensibilidade", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Identificador estável em kebab-case. Não muda (versionamento depende dele)."
+    },
+    "tipo": {
+      "type": "string",
+      "enum": ["dominio", "papel", "motor", "modulo", "bloco-regra"],
+      "description": "dominio=área; papel=ator humano; motor=engine; modulo=sistema/feature; bloco-regra=regra destacada (ex. SLA)."
+    },
+    "titulo": { "type": "string" },
+    "descricao": { "type": "string" },
+    "dominio": {
+      "type": ["string", "null"],
+      "description": "id do nó de domínio ao qual pertence (null para o próprio domínio)."
+    },
+    "sensibilidade": {
+      "type": "string",
+      "enum": ["publico", "interno", "restrito", "confidencial"],
+      "description": "Classificação de acesso. Cruza com permissoes/niveis.json."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ideia", "planejado", "em-dev", "ativo"]
+    },
+    "memoria": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "ids de documentos da matriz de memória ligados a este nó (sem extensão)."
+    },
+    "metadados": {
+      "type": "object",
+      "description": "Campos livres por tipo. Ex.: bloco-regra SLA guarda { regras: [...] }.",
+      "additionalProperties": true
+    }
+  }
+}
