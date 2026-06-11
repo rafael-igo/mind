@@ -5,6 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
 
 // ----------------------------- Tipos -----------------------------
 
@@ -69,7 +70,7 @@ export interface RespostaOrquestrador {
   rank: number;
   permitido: boolean;
   contexto: string[];
-  modo: "gateway" | "offline" | "negado" | "sem-memoria";
+  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla";
   resposta: string;
 }
 
@@ -272,13 +273,31 @@ export function buscar(texto: string, docs: DocMemoria[]): { doc: DocMemoria; sc
 // --------------------------- Gateway LLM ---------------------------
 
 /**
+ * Modelo por nível de acesso: quanto mais alto o nível, mais capaz (e caro) o LLM.
+ * O gateway precisa permitir o modelo no allowed_models do tenant; se não permitir,
+ * ele cai no modelo default sem erro.
+ */
+const MODELO_POR_NIVEL: Record<string, string> = {
+  operador: "claude-haiku-4-5",
+  consultor: "claude-haiku-4-5",
+  coordenador: "claude-sonnet-4-6",
+  rh: "claude-sonnet-4-6",
+  diretor: "claude-opus-4-8",
+  criador: "claude-fable-5",
+};
+
+export function modeloParaNivel(nivel: string): string | undefined {
+  return MODELO_POR_NIVEL[nivel];
+}
+
+/**
  * Chama o gateway LLM. Chave `tnt_*` => igo-ai-gateway (POST /v1/batch, header X-IGO-Ai-Key);
  * caso contrário, endpoint OpenAI-compatível. Sem config => null (modo offline).
  */
-export async function chamarGateway(sistema: string, usuario: string): Promise<string | null> {
+export async function chamarGateway(sistema: string, usuario: string, modeloPedido?: string): Promise<string | null> {
   const base = process.env.MIND_LLM_BASE_URL;
   const key = process.env.MIND_LLM_API_KEY;
-  const modelo = process.env.MIND_LLM_MODEL || "gpt-4o-mini";
+  const modelo = modeloPedido || process.env.MIND_LLM_MODEL || "gpt-4o-mini";
   if (!base) return null;
   const raiz = base.replace(/\/$/, "");
   try {
@@ -325,6 +344,26 @@ export async function chamarGateway(sistema: string, usuario: string): Promise<s
   }
 }
 
+// --------------------------- Motores ---------------------------
+
+/** Carrega pendências de operacao/pendencias.json (real) ou pendencias.exemplo.json. */
+export function carregarPendencias(raiz = resolverDadosRaiz()): Pendencia[] {
+  for (const nome of ["pendencias.json", "pendencias.exemplo.json"]) {
+    const arq = path.join(raiz, "operacao", nome);
+    if (fs.existsSync(arq)) {
+      const j = JSON.parse(fs.readFileSync(arq, "utf8"));
+      return Array.isArray(j.pendencias) ? j.pendencias : [];
+    }
+  }
+  return [];
+}
+
+/** Roteamento determinístico: a pergunta é sobre estouro de SLA? */
+function pedeMotorSla(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\bsla\b/.test(t) && /(estour|venc|atras|prazo)/.test(t);
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -349,6 +388,16 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     };
   }
   const rank = rankDe(perm, usuario.nivel);
+
+  // Fase 2 — motor determinístico: a LLM (ou o roteador) decide QUEM responde; o código calcula.
+  if (pedeMotorSla(input.texto)) {
+    const resultados = calcularSla(carregarPendencias(raiz));
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: ["motor-sla"], modo: "motor-sla",
+      resposta: resumirSla(resultados),
+    };
+  }
 
   // Orquestrador: recupera memória relevante (limiar evita falso-positivo por 1 palavra solta)
   const LIMIAR = 2;
@@ -386,7 +435,8 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel}): ${input.texto}\n\n` +
       `A Mind já verificou as permissões: este usuário PODE ver todos os documentos do contexto abaixo. ` +
       `Responda a pergunta normalmente, sem recusar por sensibilidade ou confidencialidade.\n\n` +
-      `Contexto da memória:\n${blocoContexto}`
+      `Contexto da memória:\n${blocoContexto}`,
+    modeloParaNivel(usuario.nivel)
   );
 
   if (viaGateway) {

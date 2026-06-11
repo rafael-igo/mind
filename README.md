@@ -30,9 +30,18 @@ Next.js + TypeScript (API + interface num projeto só). Núcleo do cérebro em
 
 ## Estado
 
-Conceito fechado. **Fase 0 e Fase 1 implementadas e testadas** (4/4 verde): grafo carrega/valida,
-orquestrador recupera memória, respeita permissão (nega operador no confidencial, libera criador)
-e não inventa sem registro. Rodar: `cd mind-web && npm install && npm run dev` (ou `npm run teste`).
+Conceito fechado. **Fases 0, 1 e 2 implementadas e testadas** (6/6 verde): grafo carrega/valida,
+orquestrador recupera memória, respeita permissão (nega operador no confidencial, libera criador),
+não inventa sem registro, e o **Motor de SLA** (`mind-web/lib/motor-sla.ts`, determinístico — a
+LLM roteia, o código calcula) classifica prioridade/estouro a partir de `operacao/pendencias*.json`.
+O motor está em TS dentro da espinha; extração para .NET fica para quando virar serviço.
 
-Pendências suas: confirmar definição de **pendente aéreo** e valores do **SLA**. Depois → Fase 2
-(Motor de SLA determinístico).
+LLM real via **igo-ai-gateway** (tenant `mind`, `localhost:4100`, contrato `/v1/batch`): o
+`chamarGateway` detecta a chave `tnt_*`; **o modelo é escolhido pelo nível do usuário**
+(operador→Haiku 4.5, coordenador/RH→Sonnet 4.6, diretor→Opus 4.8, criador→Fable 5).
+
+Rodar: `cd mind-web && npm install && npm run teste` (offline) ou
+`node --env-file=.env --experimental-strip-types scripts/teste.ts` (com gateway).
+
+Pendências suas: confirmar definição de **pendente aéreo** e os valores do **SLA** (os do motor
+são os provisórios de `memoria/sla-rsvp.md`). Depois → Fase 3 (cognição + freio).

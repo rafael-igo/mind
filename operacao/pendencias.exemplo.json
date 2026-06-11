@@ -1,0 +1,8 @@
+{
+  "descricao": "Pendências de exemplo para o Motor de SLA (Fase 2). No produto real, virá da plataforma RSVP. Datas estáticas — convidados com evento passado aparecem como estourados, o que é esperado num exemplo.",
+  "pendencias": [
+    { "convidado": "Ana Souza", "tipo": "pendente-aereo", "abertaEm": "2026-06-11T10:00:00-03:00", "eventoEm": "2026-06-12T19:00:00-03:00" },
+    { "convidado": "Bruno Lima", "tipo": "pendente-aereo", "abertaEm": "2026-06-11T08:00:00-03:00", "eventoEm": "2026-06-16T09:00:00-03:00" },
+    { "convidado": "Carla Mendes", "tipo": "hospedagem", "abertaEm": "2026-06-10T15:00:00-03:00", "eventoEm": "2026-07-20T20:00:00-03:00" }
+  ]
+}
