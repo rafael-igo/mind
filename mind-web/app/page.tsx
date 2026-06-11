@@ -12,6 +12,7 @@ interface DetalheNo {
   no: { id: string; tipo: string; titulo: string; descricao?: string; sensibilidade: string; status: string };
   arestas: { de: string; para: string; tipo: string; label?: string }[];
   memoria: { id: string; titulo: string; comunidade: string; sensibilidade: string }[];
+  cascata?: { profundidade: number; itens: { no: string; titulo: string; relacao: string; dominio: string | null; cruzaDominio: boolean }[] }[];
 }
 
 export default function Painel() {
@@ -156,6 +157,15 @@ export default function Painel() {
                   <div key={d.id} style={{ opacity: 0.8 }}>📄 {d.titulo} <i style={{ opacity: 0.6 }}>({d.comunidade} · {d.sensibilidade})</i></div>
                 ))}
               </>)}
+              {!!detalhe.cascata?.length && (<>
+                <b style={{ display: "block", marginTop: 8 }}>🌊 Cascata profunda <i style={{ opacity: 0.6 }}>(⤫ cruza domínio)</i></b>
+                {detalhe.cascata.map((nv) => (
+                  <div key={nv.profundidade} style={{ opacity: 0.8 }}>
+                    <i style={{ opacity: 0.6 }}>nível {nv.profundidade}:</i>{" "}
+                    {nv.itens.map((i) => `${i.cruzaDominio ? "⤫ " : ""}${i.titulo}`).join("; ")}
+                  </div>
+                ))}
+              </>)}
             </div>
           </aside>
         )}
@@ -214,6 +224,7 @@ export default function Painel() {
               · cliente quer alterar o controle de salas<br />
               · adicionar nó modulo "Rooming List"<br />
               · brainstorm: como reduzir atrasos no aéreo? <i style={{ opacity: 0.6 }}>(Área do Criador)</i><br />
+              · o que quebra se eu mexer no check-in NFC?<br />
               · aprovar proposta &lt;id&gt;
             </div>
           )}

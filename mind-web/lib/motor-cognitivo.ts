@@ -74,6 +74,57 @@ export function cascataDe(grafo: Grafo, noId: string): ItemCascata[] {
   return itens;
 }
 
+// ------------------- View cruzada de cascata (Fase 6) -------------------
+
+export interface ItemCascataProfunda extends ItemCascata {
+  dominio: string | null;
+  /** true quando o nó está em OUTRO domínio que o de origem — é onde a mudança "vaza" de plataforma. */
+  cruzaDominio: boolean;
+  /** nó pelo qual o impacto chegou (para reconstruir o caminho). */
+  via: string;
+}
+
+export interface NivelCascata {
+  profundidade: number;
+  itens: ItemCascataProfunda[];
+}
+
+function dominioDe(no: No): string | null {
+  return no.tipo === "dominio" ? no.id : no.dominio ?? null;
+}
+
+/**
+ * Cascata TRANSITIVA: caminha as arestas em largura (qualquer direção) a partir do nó,
+ * atravessando fronteiras de domínio — a view cruzada que mostra onde uma mudança
+ * num domínio (ex.: RSVP) respinga em outro (ex.: credenciamento).
+ */
+export function cascataTransitiva(grafo: Grafo, noId: string, maxProfundidade = 3): NivelCascata[] {
+  const porId = new Map(grafo.nos.map((n) => [n.id, n]));
+  const origem = porId.get(noId);
+  if (!origem) return [];
+  const dominioOrigem = dominioDe(origem);
+  const visitados = new Set<string>([noId]);
+  const niveis: NivelCascata[] = [];
+  let fronteira = [noId];
+
+  for (let prof = 1; prof <= maxProfundidade && fronteira.length; prof++) {
+    const itens: ItemCascataProfunda[] = [];
+    const proxima: string[] = [];
+    for (const id of fronteira) {
+      for (const item of cascataDe(grafo, id)) {
+        if (visitados.has(item.no)) continue;
+        visitados.add(item.no);
+        const no = porId.get(item.no)!;
+        itens.push({ ...item, dominio: dominioDe(no), cruzaDominio: dominioDe(no) !== dominioOrigem, via: id });
+        proxima.push(item.no);
+      }
+    }
+    if (itens.length) niveis.push({ profundidade: prof, itens });
+    fronteira = proxima;
+  }
+  return niveis;
+}
+
 const SYSTEM_PROPOSTA =
   "Você é o Motor Cognitivo da Mind. Recebe um pedido de mudança, o nó-alvo do grafo da empresa, " +
   "a cascata de nós afetados e a memória relacionada. Redija uma PROPOSTA objetiva em PT-BR: " +

@@ -79,8 +79,17 @@ simples**. O **teste da fase é o *definition of done*** — não passa para a p
   NÃO vira memória direto; promover → freio; aprovação consolida pela única porta de escrita;
   sem promoção dupla. Ciclo vivo validado com o gateway (Fable 5 rotulando fato × hipótese).
 
-### Fase 6+ — Expansão de domínios
-- Credenciamento e demais plataformas; views cruzadas de cascata.
+### Fase 6+ — Expansão de domínios 🔄 primeira entrega 11/jun/2026
+- **Entregue:** domínio **credenciamento** no grafo (`grafo/credenciamento.json` — check-in NFC,
+  balcão, regras; ancorado SÓ na memória registrada `processo-de-check-in-nfc`), com aresta
+  cruzando para o RSVP (lista de confirmados). **View cruzada de cascata**: `cascataTransitiva`
+  anda as arestas em largura atravessando domínios; no chat, perguntas de impacto ("o que quebra
+  se eu mexer em X?", "cascata de X") viram o modo `cascata` (determinístico, respeita
+  sensibilidade dos nós); no painel, o card do nó ganha a **cascata profunda** (⤫ marca
+  cruzamento de domínio). Perguntas de conhecimento ("como funciona a cascata logística?")
+  continuam indo para a memória.
+- **Próximos domínios:** logística (aéreo/transfer/hospedagem como nós), SigaEvento, LP —
+  cada um entra ancorado em memória registrada, nunca inventado.
 
 ## Próximo movimento operacional
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { carregarGrafo, carregarMemoria } from "@/lib/core";
+import { cascataTransitiva } from "@/lib/motor-cognitivo";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const docs = carregarMemoria()
       .filter((d) => (no.memoria ?? []).includes(d.id))
       .map((d) => ({ id: d.id, titulo: d.titulo, comunidade: d.comunidade, sensibilidade: d.sensibilidade }));
-    return NextResponse.json({ no, arestas, memoria: docs });
+    // Fase 6 — view cruzada: cascata transitiva (3 níveis) com marcação de cruzamento de domínio
+    const cascata = cascataTransitiva(g, no.id, 3);
+    return NextResponse.json({ no, arestas, memoria: docs, cascata });
   } catch (e) {
     return NextResponse.json({ erro: String(e) }, { status: 500 });
   }

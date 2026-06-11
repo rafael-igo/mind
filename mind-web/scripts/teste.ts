@@ -159,6 +159,26 @@ fs.rmSync(path.join(raiz, "operacao", "criatividade", `${idExp}.json`), { force:
 fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProp3}.json`), { force: true });
 fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProp3}.md`), { force: true });
 
+// --- Fase 6: expansão de domínios (credenciamento) + view cruzada de cascata ---
+const g6 = carregarGrafo(raiz);
+ok(g6.nos.some((n) => n.id === "credenciamento") &&
+  g6.arestas.some((a) => a.de === "check-in-nfc" && a.para === "atendimento-rsvp"),
+  "Fase 6 — domínio credenciamento no grafo, com aresta cruzando para o RSVP");
+
+const { cascataTransitiva } = await import("../lib/motor-cognitivo.ts");
+const niveis = cascataTransitiva(g6, "check-in-nfc", 3);
+ok(niveis.length > 1 && niveis.some((nv) => nv.itens.some((i) => i.cruzaDominio && i.dominio === "atendimento-rsvp")),
+  "Fase 6 — cascata transitiva atravessa a fronteira de domínio (credenciamento → RSVP)");
+
+const r18 = await orquestrar({ usuario: "rafael", texto: "o que quebra se eu mexer no check-in nfc?" }, raiz);
+ok(r18.modo === "cascata" && ["check-in-nfc", "credenciamento"].includes(r18.contexto[0]) && r18.resposta.includes("⤫"),
+  "Fase 6 — pergunta de impacto roteia para a view cruzada e marca o cruzamento de domínio");
+console.log("   →", r18.resposta, "\n");
+
+const r19 = await orquestrar({ usuario: "operador-exemplo", texto: "como funciona a cascata logística?" }, raiz);
+ok(r19.modo !== "cascata" && r19.contexto.includes("cascata-logistica"),
+  "Fase 6 — pergunta de CONHECIMENTO sobre cascata continua indo para a memória (não confunde com a view)");
+
 // --- Memória vetorial: degradação silenciosa quando Ollama está desligado ---
 const { ollamaDisponivel, buscarVetorial } = await import("../lib/memoria-vetorial.ts");
 ok((await ollamaDisponivel(true)) === false && (await buscarVetorial("pendente aéreo")) === null,

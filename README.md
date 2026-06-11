@@ -30,7 +30,8 @@ Next.js + TypeScript (API + interface num projeto só). Núcleo do cérebro em
 
 ## Estado
 
-Conceito fechado. **Fases 0–5 implementadas e testadas** (27/27 hermético + 4/4 vetorial vivo):
+Conceito fechado. **Fases 0–6 (1ª entrega) implementadas e testadas** (31/31 hermético + 4/4
+vetorial vivo):
 
 - **F0/F1** — grafo carrega/valida; orquestrador recupera memória, respeita permissão e não
   inventa sem registro. Memória em camadas: `recente/` (episódica), `profunda/` (semântica),
@@ -51,6 +52,10 @@ Conceito fechado. **Fases 0–5 implementadas e testadas** (27/27 hermético + 4
   `operacao/criatividade/` (workspace — não viram memória); `promover exploracao <id>` cria
   proposta que para no freio. No painel, a **Área do Criador** (rank 100, checado server-side)
   lista explorações e propostas pendentes com decisão em um clique.
+- **F6 (1ª entrega)** — **Expansão de domínios**: `grafo/credenciamento.json` (check-in NFC,
+  ancorado só em memória registrada) + **view cruzada de cascata**: `cascataTransitiva` cruza
+  fronteiras de domínio; pergunta de impacto no chat → modo `cascata`; card do nó no painel
+  mostra a cascata profunda (⤫ = cruza domínio).
 
 LLM real via **gateway exclusivo da Mind** (branch `mind-gateway` do igo-ai-gateway, porta 4101,
 **Postgres no Docker** no lugar do Supabase): o `chamarGateway` detecta a chave `tnt_*`; **o

@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
-import { montarProposta } from "./motor-cognitivo.ts";
+import { montarProposta, encontrarNoAlvo, cascataTransitiva } from "./motor-cognitivo.ts";
 import { criarProposta, decidirProposta, RANK_MINIMO_APROVACAO } from "./freio.ts";
 import {
   explorar, salvarExploracao, carregarExploracao, rascunhoDePromocao, RANK_MINIMO_CRIADOR,
@@ -79,7 +79,7 @@ export interface RespostaOrquestrador {
   rank: number;
   permitido: boolean;
   contexto: string[];
-  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao" | "criatividade";
+  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao" | "criatividade" | "cascata";
   resposta: string;
 }
 
@@ -446,6 +446,15 @@ function parseComandoPromover(texto: string): { id: string } | null {
   return m ? { id: m[1] } : null;
 }
 
+/**
+ * Roteamento (Fase 6): pergunta de IMPACTO ("o que quebra/afeta", "cascata de X") →
+ * view cruzada de cascata. Frases como "como funciona a cascata logística" NÃO casam
+ * (não têm "de quê" de impacto) e seguem para a memória.
+ */
+function pedeCascata(texto: string): boolean {
+  return /(o que (afeta|quebra|impacta)|qual o impacto|se eu mexer|cascata d[eoa]\s)/.test(normalizar(texto));
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -567,6 +576,36 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: [exploracao.id], modo: "criatividade", resposta,
+    };
+  }
+
+  // Fase 6 — view cruzada de cascata: análise de impacto transitiva, atravessando domínios.
+  // Determinística (anda as arestas do grafo) e respeita sensibilidade dos nós.
+  if (pedeCascata(input.texto)) {
+    const grafo = carregarGrafo(raiz);
+    const alvo = encontrarNoAlvo(input.texto, grafo);
+    const niveis = cascataTransitiva(grafo, alvo.id, 3).map((nv) => ({
+      ...nv,
+      itens: nv.itens.filter((i) => {
+        const no = grafo.nos.find((n) => n.id === i.no)!;
+        return rank >= (perm.sensibilidadeParaRankMinimo[no.sensibilidade] ?? 0);
+      }),
+    })).filter((nv) => nv.itens.length > 0);
+    const dominiosCruzados = [...new Set(niveis.flatMap((nv) => nv.itens.filter((i) => i.cruzaDominio).map((i) => i.dominio ?? "?")))];
+    const resposta = niveis.length === 0
+      ? `🌊 "${alvo.titulo}" (${alvo.id}) não tem arestas no grafo — mudança isolada (ou nós fora do seu nível).`
+      : `🌊 Impacto a partir de "${alvo.titulo}" (${alvo.id}):\n` +
+        niveis.map((nv) =>
+          `Nível ${nv.profundidade}: ` +
+          nv.itens.map((i) => `${i.cruzaDominio ? "⤫ " : ""}${i.titulo} [${i.relacao}${i.via !== alvo.id ? ` via ${i.via}` : ""}]`).join("; ")
+        ).join("\n") +
+        (dominiosCruzados.length
+          ? `\n\n⤫ A mudança CRUZA de domínio: respinga em ${dominiosCruzados.join(", ")}.`
+          : "\n\nO impacto fica dentro do próprio domínio.") +
+        `\n(cascata determinística pelas arestas do grafo — fonte da verdade)`;
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [alvo.id], modo: "cascata", resposta,
     };
   }
 

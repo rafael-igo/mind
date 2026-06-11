@@ -1,0 +1,93 @@
+{
+  "versao": "0.1.0",
+  "dominio": "credenciamento",
+  "atualizado_em": "2026-06-11",
+  "comentario": "Fase 6 — primeiro domínio de expansão. Nós ancorados APENAS na memória registrada (processo-de-check-in-nfc); o que não tem registro entra como 'planejado' via freio, nunca direto.",
+  "nos": [
+    {
+      "id": "credenciamento",
+      "tipo": "dominio",
+      "titulo": "Credenciamento",
+      "descricao": "Chegada do convidado ao evento: check-in por pulseira NFC no balcão de credenciamento.",
+      "dominio": null,
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "processo-de-check-in-nfc"
+      ]
+    },
+    {
+      "id": "check-in-nfc",
+      "tipo": "modulo",
+      "titulo": "Check-in NFC",
+      "descricao": "Check-in dos convidados por pulseira NFC, com sincronização offline a cada 5 minutos.",
+      "dominio": "credenciamento",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "processo-de-check-in-nfc"
+      ]
+    },
+    {
+      "id": "balcao-credenciamento",
+      "tipo": "modulo",
+      "titulo": "Balcão de Credenciamento",
+      "descricao": "Atende o convidado na chegada; convidado sem pulseira recebe uma nova no balcão.",
+      "dominio": "credenciamento",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "processo-de-check-in-nfc"
+      ]
+    },
+    {
+      "id": "bloco-regras-checkin",
+      "tipo": "bloco-regra",
+      "titulo": "Regras de Check-in",
+      "descricao": "Sem pulseira → emitir nova no balcão. Sincronização offline a cada 5 minutos.",
+      "dominio": "credenciamento",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "processo-de-check-in-nfc"
+      ],
+      "metadados": {
+        "sincronizacao_offline_minutos": 5
+      }
+    }
+  ],
+  "arestas": [
+    {
+      "de": "credenciamento",
+      "para": "check-in-nfc",
+      "tipo": "contem"
+    },
+    {
+      "de": "credenciamento",
+      "para": "balcao-credenciamento",
+      "tipo": "contem"
+    },
+    {
+      "de": "credenciamento",
+      "para": "bloco-regras-checkin",
+      "tipo": "contem"
+    },
+    {
+      "de": "balcao-credenciamento",
+      "para": "check-in-nfc",
+      "tipo": "aciona",
+      "label": "executa o check-in"
+    },
+    {
+      "de": "check-in-nfc",
+      "para": "bloco-regras-checkin",
+      "tipo": "depende-de"
+    },
+    {
+      "de": "check-in-nfc",
+      "para": "atendimento-rsvp",
+      "tipo": "depende-de",
+      "label": "lista de convidados confirmados (cascata RSVP)"
+    }
+  ]
+}
