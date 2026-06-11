@@ -33,12 +33,17 @@ export async function ollamaDisponivel(force = false): Promise<boolean> {
   return valor;
 }
 
-export async function gerarEmbedding(texto: string): Promise<number[] | null> {
+// nomic-embed-text foi treinado com prefixos de tarefa — sem eles os scores ficam achatados
+// (tudo ~0.71) e a busca não discrimina. Documento e consulta usam prefixos diferentes.
+const EMB_VERSAO = "v2-prefixo-nomic"; // entra no hash p/ forçar reindexação quando o esquema muda
+
+export async function gerarEmbedding(texto: string, tipo: "documento" | "consulta" = "consulta"): Promise<number[] | null> {
+  const prefixo = tipo === "documento" ? "search_document: " : "search_query: ";
   try {
     const r = await fetch(`${OLLAMA_URL().replace(/\/$/, "")}/api/embeddings`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: OLLAMA_MODELO(), prompt: texto.slice(0, 8000) }),
+      body: JSON.stringify({ model: OLLAMA_MODELO(), prompt: prefixo + texto.slice(0, 8000) }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!r.ok) return null;
@@ -98,14 +103,14 @@ export async function indexarMemoria(docs: DocMemoria[]): Promise<ResultadoIndex
 
   let indexados = 0, pulados = 0, chunks = 0;
   for (const doc of docs) {
-    const hash = createHash("sha256").update(doc.corpo).digest("hex");
+    const hash = createHash("sha256").update(EMB_VERSAO + doc.corpo).digest("hex");
     const { rows } = await db.query("SELECT hash FROM memoria_vetores WHERE doc_id = $1 LIMIT 1", [doc.id]);
     if (rows[0]?.hash === hash) { pulados++; continue; }
 
     const partes = chunkar(`# ${doc.titulo}\n\n${doc.corpo}`);
     const embeddings: number[][] = [];
     for (const p of partes) {
-      const e = await gerarEmbedding(p);
+      const e = await gerarEmbedding(p, "documento");
       if (!e) return { indexados, pulados, chunks }; // Ollama caiu no meio — para sem corromper
       embeddings.push(e);
     }

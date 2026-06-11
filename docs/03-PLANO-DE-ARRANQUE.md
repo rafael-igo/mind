@@ -56,6 +56,17 @@ simples**. O **teste da fase é o *definition of done*** — não passa para a p
 - **Teste:** clicar num nó abre o detalhe; instruir pelo chat edita o JSON e o diagrama
   reorganiza.
 
+### Fase 4.5 — Memória Vetorial (busca por significado) ✅ entregue 11/jun/2026
+- **Construir:** embeddings locais via **Ollama** (`nomic-embed-text`, prefixos de tarefa) em
+  **pgvector** (Postgres do mind-gateway); indexação incremental por hash (`npm run indexar`);
+  busca **híbrida** no orquestrador (vetorial complementa lexical); monitor no painel — a máquina
+  do Ollama liga sob demanda e, desligada, a Mind **degrada para lexical** sem erro.
+  Decisões: Mind independente do IGO AI Studio (banco de peças); só Claude (sem GPT);
+  canal automático decidido pelo orquestrador (`docs/06-DEPARA-ORQUESTRADORES.md`).
+- **Teste (`npm run teste:vetorial`, vivo):** pergunta **sem palavra-chave** acha o doc certo por
+  significado; similaridade **não fura permissão** (podeVer depois da busca); orquestrador responde
+  via busca híbrida. 4/4 verde.
+
 ### Fase 5 — Criatividade + Área do Criador
 - **Construir:** Motor de Criatividade / Resolução de Problemas (cognitivo, modelo forte) + a
   Área do Criador (nível máximo + workspace dedicado).

@@ -30,7 +30,7 @@ Next.js + TypeScript (API + interface num projeto só). Núcleo do cérebro em
 
 ## Estado
 
-Conceito fechado. **Fases 0–3 implementadas e testadas** (13/13 verde):
+Conceito fechado. **Fases 0–4.5 implementadas e testadas** (20/20 hermético + 4/4 vetorial vivo):
 
 - **F0/F1** — grafo carrega/valida; orquestrador recupera memória, respeita permissão e não
   inventa sem registro. Memória em camadas: `recente/` (episódica), `profunda/` (semântica),
