@@ -8,6 +8,7 @@ services:
       MIND_LLM_BASE_URL: ${MIND_LLM_BASE_URL:-}
       MIND_LLM_API_KEY: ${MIND_LLM_API_KEY:-}
       MIND_LLM_MODEL: ${MIND_LLM_MODEL:-claude-haiku-4-5}
+      MIND_INGESTOR_URL: ${MIND_INGESTOR_URL:-}
     volumes:
       # Monta o repositório (grafo/ memoria/ permissoes/) como dados — leitura.
       - ./grafo:/data/grafo:ro

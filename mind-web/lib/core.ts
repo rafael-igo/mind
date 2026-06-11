@@ -361,6 +361,23 @@ export async function chamarGateway(sistema: string, usuario: string, modeloPedi
   }
 }
 
+// --------------------------- Captura de memória episódica ---------------------------
+
+/**
+ * Manda a troca de chat pro mind-ingestor (memória recente do cofre Obsidian).
+ * Fire-and-forget: sem MIND_INGESTOR_URL configurada, ou com o ingestor fora do ar,
+ * a Mind responde normalmente — capturar memória nunca pode travar a fala.
+ */
+function capturarNoIngestor(usuario: string, pergunta: string, resposta: string, contexto: string[]): void {
+  const base = process.env.MIND_INGESTOR_URL;
+  if (!base) return;
+  fetch(`${base.replace(/\/$/, "")}/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ usuario, pergunta, resposta, contexto }),
+  }).catch(() => {});
+}
+
 // --------------------------- Motores ---------------------------
 
 /** Carrega pendências de operacao/pendencias.json (real) ou pendencias.exemplo.json. */
@@ -447,10 +464,12 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   // Fase 2 — motor determinístico: a LLM (ou o roteador) decide QUEM responde; o código calcula.
   if (pedeMotorSla(input.texto)) {
     const resultados = calcularSla(carregarPendencias(raiz));
+    const resposta = resumirSla(resultados);
+    capturarNoIngestor(usuario.id, input.texto, resposta, ["motor-sla"]);
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: ["motor-sla"], modo: "motor-sla",
-      resposta: resumirSla(resultados),
+      resposta,
     };
   }
 
@@ -521,6 +540,7 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   );
 
   if (viaGateway) {
+    capturarNoIngestor(usuario.id, input.texto, viaGateway, contexto.map((d) => d.id));
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: contexto.map((d) => d.id), modo: "gateway", resposta: viaGateway,

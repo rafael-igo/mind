@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mind-ingestor": {
+      "command": "/Users/rafamacpro/Projetos/GIT-RAFAEL/mcp-servers/mind-ingestor/.venv/bin/python",
+      "args": ["/Users/rafamacpro/Projetos/GIT-RAFAEL/mcp-servers/mind-ingestor/server.py"],
+      "env": {
+        "MIND_DADOS": "/Users/rafamacpro/Projetos/MIND/Mind"
+      }
+    }
+  }
+}
