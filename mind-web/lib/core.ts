@@ -245,8 +245,18 @@ function normalizar(s: string): string {
   return out;
 }
 
+// Palavras de pergunta/ligação não carregam significado — sem elas, "como funciona X?" busca só por X.
+const STOPWORDS = new Set([
+  "que", "qual", "quais", "como", "quando", "onde", "quem", "por", "porque",
+  "para", "com", "sem", "sobre", "isso", "este", "esta", "esse", "essa",
+  "dos", "das", "uma", "uns", "umas", "sao", "tem", "ter", "ser", "mais",
+  "funciona", "existe", "pode", "fazer",
+]);
+
 export function buscar(texto: string, docs: DocMemoria[]): { doc: DocMemoria; score: number }[] {
-  const termos = normalizar(texto).split(/\W+/).filter((t) => t.length > 2);
+  const termos = normalizar(texto)
+    .split(/\W+/)
+    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
   const res = docs.map((doc) => {
     const alvo = normalizar(`${doc.titulo} ${doc.id} ${doc.tags.join(" ")} ${doc.corpo}`);
     let score = 0;
@@ -261,14 +271,38 @@ export function buscar(texto: string, docs: DocMemoria[]): { doc: DocMemoria; sc
 
 // --------------------------- Gateway LLM ---------------------------
 
-/** Chama um endpoint OpenAI-compatível (gateway IGO). Sem config => null (modo offline). */
+/**
+ * Chama o gateway LLM. Chave `tnt_*` => igo-ai-gateway (POST /v1/batch, header X-IGO-Ai-Key);
+ * caso contrário, endpoint OpenAI-compatível. Sem config => null (modo offline).
+ */
 export async function chamarGateway(sistema: string, usuario: string): Promise<string | null> {
   const base = process.env.MIND_LLM_BASE_URL;
   const key = process.env.MIND_LLM_API_KEY;
   const modelo = process.env.MIND_LLM_MODEL || "gpt-4o-mini";
   if (!base) return null;
+  const raiz = base.replace(/\/$/, "");
   try {
-    const r = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+    if (key?.startsWith("tnt_")) {
+      const r = await fetch(`${raiz}/v1/batch`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-igo-ai-key": key,
+        },
+        body: JSON.stringify({
+          system: sistema,
+          messages: [{ role: "user", content: usuario }],
+          model_hint: modelo,
+          task_type: "chat",
+          agent: "mind",
+          temperature: 0.2,
+        }),
+      });
+      if (!r.ok) return null;
+      const j: any = await r.json();
+      return j?.text ?? null;
+    }
+    const r = await fetch(`${raiz}/chat/completions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -346,9 +380,13 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     .join("\n\n");
 
   // Fala: tenta o gateway; se não houver, modo offline (prova recuperação + permissão)
+  // O controle de acesso é determinístico e já aconteceu acima — o LLM não deve recusar por confidencialidade.
   const viaGateway = await chamarGateway(
     SYSTEM_PROMPT,
-    `Pergunta: ${input.texto}\n\nContexto da memória:\n${blocoContexto}`
+    `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel}): ${input.texto}\n\n` +
+      `A Mind já verificou as permissões: este usuário PODE ver todos os documentos do contexto abaixo. ` +
+      `Responda a pergunta normalmente, sem recusar por sensibilidade ou confidencialidade.\n\n` +
+      `Contexto da memória:\n${blocoContexto}`
   );
 
   if (viaGateway) {
