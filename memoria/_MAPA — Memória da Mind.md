@@ -36,5 +36,6 @@ Abra o **Graph view**: laranja = recente, verde = profunda, cinza = inbox, roxo 
 
 ## Pendências de curadoria
 
-- [ ] Confirmar definição oficial de [[pendente-aereo]] (há definição real na BASE_CONHECIMENTO da I GO).
-- [ ] Validar os valores do [[sla-rsvp]] (crítica 2h / alta 8h / normal 24h são provisórios).
+- [x] ~~Confirmar definição oficial de [[pendente-aereo]]~~ — consolidada em 11/jun (fontes: processos-slas-rsvp + RSVP40). Ver também [[status-rsvp-e-aereo]].
+- [ ] **Oficializar** os valores de resposta do [[sla-rsvp]] (2h/8h/24h são proposta sua — a operação não tem SLA de resposta formalizado; entregáveis oficiais em [[sla-igo-oficial]]).
+- [ ] Validar [[papeis-raci-rsvp]] e o ajuste dos papéis no grafo (Consultor executa, Especialista confere; novos: Solicita RSVP e Apoio).

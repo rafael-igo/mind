@@ -7,17 +7,21 @@ dominio: atendimento-rsvp
 sensibilidade: interno
 tags: [sla, prazo, prioridade]
 nos: [bloco-sla-rsvp, motor-sla]
-relacionados: [papel-operador]
-fonte: chat de concepção (07/jun) — valores de exemplo, a validar com Rafael
+relacionados: [papel-operador, sla-igo-oficial]
+fonte: chat de concepção (07/jun) — proposta do Rafael a oficializar (não há SLA de resposta formalizado na operação)
 atualizado_em: 2026-06-11
 ---
 
 # SLA de Atendimento RSVP
 
-Regras de prazo e prioridade. No produto vira o **Motor de SLA** (determinístico, .NET): dada uma
+Regras de prazo e prioridade. No produto é o **Motor de SLA** (determinístico): dada uma
 lista/data, calcula prazo e prioridade.
 
-## Regras (exemplo — a validar)
+> Nota (11/jun): estes valores de **resposta de atendimento** são **proposta a oficializar** —
+> a operação não tem SLA de resposta formalizado (lacuna confirmada no RSVP40, futuro Task Engine).
+> Os SLAs oficiais de **entregáveis** (dias úteis) estão em [[sla-igo-oficial]].
+
+## Regras (proposta — a oficializar)
 | Prioridade | Prazo | Gatilho |
 |---|---|---|
 | Crítica | 2h | evento em menos de 48h |

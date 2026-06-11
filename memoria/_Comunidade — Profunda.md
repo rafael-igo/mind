@@ -8,8 +8,12 @@ gerado_por: mind-ingestor (atualizar_hubs)
 
 Conhecimento consolidado e curado — a Mind responde a partir daqui com confiança.
 
+- [[cascata-logistica]]
+- [[papeis-raci-rsvp]]
 - [[papel-operador]]
 - [[pendente-aereo]]
 - [[processo-de-check-in-nfc]]
+- [[sla-igo-oficial]]
 - [[sla-rsvp]]
+- [[status-rsvp-e-aereo]]
 - [[tabela-salarios]]

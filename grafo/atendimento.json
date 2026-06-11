@@ -1,5 +1,5 @@
 {
-  "versao": "0.1.0",
+  "versao": "0.3.0",
   "dominio": "atendimento-rsvp",
   "atualizado_em": "2026-06-11",
   "nos": [
@@ -17,12 +17,13 @@
       "id": "papel-operador",
       "tipo": "papel",
       "titulo": "Operador de Atendimento",
-      "descricao": "Linha de frente. Atende o convidado, verifica e atualiza status, segue o SLA.",
+      "descricao": "Ativos por telefone/WhatsApp (máx. 150 msg/dia) e ativo de presença. Regra: 4 tentativas sem sucesso → status PENDENTE CLIENTE + nota no RSVP.",
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
       "memoria": [
-        "papel-operador"
+        "papel-operador",
+        "papeis-raci-rsvp"
       ],
       "metadados": {
         "canais": [
@@ -39,27 +40,31 @@
       "id": "papel-consultor",
       "tipo": "papel",
       "titulo": "Consultor",
-      "descricao": "Trata o que o operador escala; conhecimento mais específico do cliente/processo.",
+      "descricao": "Executa o RSVP (ações 11–30 da matriz RACI) e faz ativos por telefone/WhatsApp.",
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
-      "memoria": []
+      "memoria": [
+        "papeis-raci-rsvp"
+      ]
     },
     {
       "id": "papel-especialista",
       "tipo": "papel",
       "titulo": "Especialista",
-      "descricao": "Casos que exigem domínio técnico/profundo.",
+      "descricao": "Aprova com o cliente, confere patrocínios e acompanha a operação (RACI: CONFERIR/ACOMPANHAR).",
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
-      "memoria": []
+      "memoria": [
+        "papeis-raci-rsvp"
+      ]
     },
     {
       "id": "papel-coordenador",
       "tipo": "papel",
       "titulo": "Coordenador",
-      "descricao": "Topo da cascata; decisão e exceção.",
+      "descricao": "Gestão de fila do time: reatribuição, acompanhamento de SLA, prioridades (papel do RSVP40; não consta na matriz RACI operacional).",
       "dominio": "atendimento-rsvp",
       "sensibilidade": "restrito",
       "status": "ativo",
@@ -119,6 +124,30 @@
       "sensibilidade": "interno",
       "status": "ativo",
       "memoria": []
+    },
+    {
+      "id": "papel-solicita-rsvp",
+      "tipo": "papel",
+      "titulo": "Solicita RSVP",
+      "descricao": "Abre a operação: cria evento, pasta, e-mail e input de convidados.",
+      "dominio": "atendimento-rsvp",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "papeis-raci-rsvp"
+      ]
+    },
+    {
+      "id": "papel-apoio",
+      "tipo": "papel",
+      "titulo": "Apoio",
+      "descricao": "Input de convidados, inserção de contatos no Google e suporte aos ativos.",
+      "dominio": "atendimento-rsvp",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "papeis-raci-rsvp"
+      ]
     }
   ],
   "arestas": [
@@ -186,6 +215,28 @@
       "para": "controle-de-salas",
       "tipo": "depende-de",
       "label": "consulta alocação"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-solicita-rsvp",
+      "tipo": "contem"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-apoio",
+      "tipo": "contem"
+    },
+    {
+      "de": "papel-solicita-rsvp",
+      "para": "papel-consultor",
+      "tipo": "fluxo",
+      "label": "entrega operação pronta"
+    },
+    {
+      "de": "papel-apoio",
+      "para": "papel-operador",
+      "tipo": "fluxo",
+      "label": "suporte aos ativos"
     }
   ]
 }

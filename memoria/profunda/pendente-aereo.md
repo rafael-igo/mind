@@ -7,25 +7,28 @@ dominio: atendimento-rsvp
 sensibilidade: interno
 tags: [pendencia, aereo, status]
 nos: [papel-operador]
-relacionados: [papel-operador, sla-rsvp]
-fonte: termo citado por Rafael no chat — DEFINIÇÃO A CONFIRMAR
+relacionados: [status-rsvp-e-aereo, cascata-logistica, sla-rsvp]
+fonte: BASE_CONHECIMENTO/processos-slas-rsvp.md + RSVP40/sigaeventos/BUSINESS_RULES.md — aprovado por Rafael em 2026-06-11
 atualizado_em: 2026-06-11
 ---
 
 # Pendente Aéreo
 
-> ⚠️ Definição provisória — **Rafael precisa confirmar/corrigir**. Este é o documento usado no
-> teste da Fase 1 ("o que é pendente aéreo?"), então o conteúdo correto importa.
+**PENDENTE AEREO** é um status do grupo **PROCESSAMENTO** do fluxo aéreo (SIGA Eventos / LP,
+tabela Pax, coluna `status_aereo`): pendência **interna** da operação — operador/agência
+trabalhando na emissão do voo. Não é ação pendente do convidado.
 
-Provisoriamente: status de um convidado cujo **trecho aéreo (voo)** ainda está **pendente** —
-falta emitir, confirmar ou ajustar a passagem/itinerário. Enquanto "pendente aéreo", o convidado
-não está com a logística fechada e pode exigir acompanhamento do operador.
+## Não confundir com os três "pendentes" do glossário do aéreo
 
-## Por que existe
-A jornada de alguns convidados inclui deslocamento aéreo; o atendimento RSVP acompanha essa
-pendência até a resolução, dentro do [[sla-rsvp]].
+- **Pendente Convidado** — ainda não há aprovação da emissão por parte do convidado.
+- **Pendente Cliente** — pendência do cliente final (ex.: aprovação de valor, voo fora da agenda do evento).
+- **Pendente RSVP** — o aéreo da agência passou orientação (que não é nova opção de voo) via coluna
+  "OBSERVAÇÕES DO AEREO PARA A I GO".
 
-## A confirmar com Rafael
-- Definição exata e quem resolve.
-- Quais sistemas registram o pendente aéreo.
-- Efeitos cascata (impacto em hospedagem, credenciamento, etc.).
+Taxonomia completa dos status em [[status-rsvp-e-aereo]].
+
+## Efeitos cascata
+
+O aéreo é a **primeira etapa** da [[cascata-logistica]] (`CONFIRMADO → AÉREO → TRANSFER →
+HOSPEDAGEM → ACOMPANHANTE → UPLOAD → FINALIZADO`): pendência aérea segura transfer, hospedagem
+e voucher. O atendimento acompanha até a resolução, dentro do [[sla-rsvp]].
