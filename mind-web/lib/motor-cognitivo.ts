@@ -6,6 +6,7 @@
  * Puro (sem fs): recebe grafo/memória e um chamador de LLM opcional.
  */
 import type { Grafo, No, DocMemoria } from "./core.ts";
+import type { OperacaoGrafo } from "./grafo-editor.ts";
 
 export interface ItemCascata {
   no: string; // id do nó afetado
@@ -25,6 +26,8 @@ export interface PropostaRascunho {
   raciocinio: string;
   perguntas: string[];
   propostaTexto: string;
+  /** Operação determinística sobre o grafo (Fase 4) — só o freio aplica, na aprovação. */
+  operacaoGrafo?: OperacaoGrafo;
 }
 
 function normalizarLocal(s: string): string {

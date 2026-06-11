@@ -6,6 +6,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { carregarGrafo, carregarMemoria, orquestrar, resolverDadosRaiz } from "../lib/core.ts";
 import { calcularSla } from "../lib/motor-sla.ts";
+import { gerarMermaid } from "../lib/projecao.ts";
+import { parseOperacaoGrafo } from "../lib/grafo-editor.ts";
+
+// Testes são herméticos: nunca capturam no ingestor (senão cada rodada polui a memória recente)
+process.env.MIND_INGESTOR_URL = "";
 
 function ok(cond: boolean, msg: string) {
   console.log(`${cond ? "✅" : "❌"} ${msg}`);
@@ -93,3 +98,35 @@ ok(!r9.resposta.includes("APROVADA") && r9.resposta.includes("já foi decidida")
 // Limpeza: artefatos criados pelo teste não viram estado permanente
 fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProposta}.json`), { force: true });
 fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProposta}.md`), { force: true });
+
+// --- Fase 4: projeção Mermaid + edição do grafo via chat (com freio) ---
+const mermaid = gerarMermaid(g);
+ok(mermaid.startsWith("flowchart") && mermaid.includes("controle-de-salas") && mermaid.includes("-->"),
+  "Fase 4 — projeção Mermaid gerada do JSON (fonte da verdade)");
+
+const opParse = parseOperacaoGrafo('adicionar nó modulo "Rooming List" em atendimento-rsvp', g);
+ok(opParse?.op === "adicionar-no" && opParse.no.id === "rooming-list",
+  "Fase 4 — comando de chat vira operação determinística de grafo");
+
+const r10 = await orquestrar({ usuario: "rafael", texto: 'adicionar nó modulo "Rooming List" em atendimento-rsvp' }, raiz);
+const idProp2 = r10.contexto[0];
+ok(r10.modo === "freio-proposta" && r10.resposta.includes("Operação executável"),
+  "Fase 4 — edição de grafo pelo chat vira proposta no freio (não executa direto)");
+ok(!carregarGrafo(raiz).nos.some((n) => n.id === "rooming-list"),
+  "Fase 4 — antes da aprovação, o grafo JSON está INTACTO");
+
+const r11 = await orquestrar({ usuario: "rafael", texto: `aprovar proposta ${idProp2}` }, raiz);
+const gDepois = carregarGrafo(raiz);
+ok(r11.permitido && r11.resposta.includes("Grafo atualizado") && gDepois.nos.some((n) => n.id === "rooming-list"),
+  "Fase 4 — aprovação aplica a operação: nó novo no JSON e o diagrama reorganiza");
+ok(gerarMermaid(gDepois).includes("rooming-list"),
+  "Fase 4 — projeção Mermaid re-renderiza com o nó novo");
+
+// Limpeza: desfaz a edição de teste no grafo e remove artefatos
+const arqGrafo = path.join(raiz, "grafo", "atendimento.json");
+const dadosGrafo = JSON.parse(fs.readFileSync(arqGrafo, "utf8"));
+dadosGrafo.nos = dadosGrafo.nos.filter((n: any) => n.id !== "rooming-list");
+dadosGrafo.arestas = dadosGrafo.arestas.filter((a: any) => a.de !== "rooming-list" && a.para !== "rooming-list");
+fs.writeFileSync(arqGrafo, JSON.stringify(dadosGrafo, null, 2) + "\n");
+fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProp2}.json`), { force: true });
+fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProp2}.md`), { force: true });

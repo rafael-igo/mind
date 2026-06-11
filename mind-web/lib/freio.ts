@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { PropostaRascunho } from "./motor-cognitivo.ts";
+import { aplicarOperacaoGrafo, descreverOperacao } from "./grafo-editor.ts";
 
 export const RANK_MINIMO_APROVACAO = 50;
 
@@ -17,6 +18,7 @@ export interface Proposta extends PropostaRascunho {
   decididaPor?: string;
   decididaEm?: string;
   arquivoDecisao?: string;
+  grafoAplicado?: boolean;
 }
 
 export function dirPropostas(raiz: string): string {
@@ -50,7 +52,8 @@ export function listarPropostas(raiz: string, status?: Proposta["status"]): Prop
 
 export interface ResultadoDecisao {
   ok: boolean;
-  erro?: "nao-encontrada" | "ja-decidida" | "rank-insuficiente";
+  erro?: "nao-encontrada" | "ja-decidida" | "rank-insuficiente" | "operacao-grafo-falhou";
+  detalhe?: string;
   proposta?: Proposta;
 }
 
@@ -65,6 +68,17 @@ export function decidirProposta(
   if (!proposta) return { ok: false, erro: "nao-encontrada" };
   if (proposta.status !== "pendente") return { ok: false, erro: "ja-decidida", proposta };
   if (decisor.rank < RANK_MINIMO_APROVACAO) return { ok: false, erro: "rank-insuficiente", proposta };
+
+  // Fase 4 — a operação de grafo só é aplicada AQUI, na aprovação (chat propõe, freio executa).
+  // Se falhar, a proposta continua pendente — nada fica meio-aplicado.
+  if (decisao === "aprovada" && proposta.operacaoGrafo) {
+    try {
+      aplicarOperacaoGrafo(raiz, proposta.operacaoGrafo);
+      proposta.grafoAplicado = true;
+    } catch (err) {
+      return { ok: false, erro: "operacao-grafo-falhou", detalhe: String(err), proposta };
+    }
+  }
 
   proposta.status = decisao;
   proposta.decididaPor = decisor.id;
@@ -101,7 +115,7 @@ atualizado_em: ${data}
 - **Aprovada por:** ${p.decididaPor} em ${data}
 - **Nó-alvo:** ${p.tituloAlvo} (\`${p.noAlvo}\`)
 - **Cascata avaliada:** ${p.cascata.length ? p.cascata.map((c) => `${c.titulo} [${c.relacao}]`).join("; ") : "nenhuma"}
-- **Memória consultada:** ${p.memoriaRelacionada.join(", ") || "nenhuma"}
+- **Memória consultada:** ${p.memoriaRelacionada.join(", ") || "nenhuma"}${p.operacaoGrafo ? `\n- **Operação aplicada no grafo:** ${descreverOperacao(p.operacaoGrafo)}` : ""}
 
 ## Proposta aprovada
 

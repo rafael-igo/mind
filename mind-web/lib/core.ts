@@ -8,6 +8,7 @@ import path from "node:path";
 import { calcularSla, resumirSla, type Pendencia } from "./motor-sla.ts";
 import { montarProposta } from "./motor-cognitivo.ts";
 import { criarProposta, decidirProposta, RANK_MINIMO_APROVACAO } from "./freio.ts";
+import { parseOperacaoGrafo, descreverOperacao } from "./grafo-editor.ts";
 
 // ----------------------------- Tipos -----------------------------
 
@@ -282,6 +283,9 @@ export function buscar(texto: string, docs: DocMemoria[]): { doc: DocMemoria; sc
       if (normalizar(doc.titulo).includes(t)) score += 5;
       else if (alvo.includes(t)) score += 1;
     }
+    // Eco de conversa não compete com conhecimento curado: chats (memória episódica)
+    // pesam metade — a pergunta do usuário ecoa no título do chat e venceria sempre.
+    if (doc.tipo === "chat") score *= 0.5;
     return { doc, score };
   });
   return res.filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
@@ -368,14 +372,31 @@ export async function chamarGateway(sistema: string, usuario: string, modeloPedi
  * Fire-and-forget: sem MIND_INGESTOR_URL configurada, ou com o ingestor fora do ar,
  * a Mind responde normalmente — capturar memória nunca pode travar a fala.
  */
-function capturarNoIngestor(usuario: string, pergunta: string, resposta: string, contexto: string[]): void {
+function capturarNoIngestor(
+  usuario: string,
+  pergunta: string,
+  resposta: string,
+  contexto: string[],
+  sensibilidade: Sensibilidade = "interno"
+): void {
   const base = process.env.MIND_INGESTOR_URL;
   if (!base) return;
+  // Anti-vazamento por eco: resposta construída sobre contexto restrito/confidencial NÃO vira
+  // memória episódica — o chat capturado nasceria com sensibilidade menor que a fonte e furaria
+  // a permissão (um operador encontraria no eco o que não pode ver no original).
+  if (SENS.indexOf(sensibilidade) >= SENS.indexOf("restrito")) return;
   fetch(`${base.replace(/\/$/, "")}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ usuario, pergunta, resposta, contexto }),
+    body: JSON.stringify({ usuario, pergunta, resposta, contexto, sensibilidade }),
   }).catch(() => {});
+}
+
+/** Maior sensibilidade entre docs (para herança na captura de chat). */
+function maxSensibilidade(docs: DocMemoria[]): Sensibilidade {
+  let max = 0;
+  for (const d of docs) max = Math.max(max, SENS.indexOf(d.sensibilidade));
+  return (SENS[max] ?? "interno") as Sensibilidade;
 }
 
 // --------------------------- Motores ---------------------------
@@ -444,6 +465,7 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
         "nao-encontrada": `Não encontrei a proposta ${cmdFreio.id}.`,
         "ja-decidida": `A proposta ${cmdFreio.id} já foi decidida (${r.proposta?.status}).`,
         "rank-insuficiente": `O freio exige nível diretor ou acima (rank >= ${RANK_MINIMO_APROVACAO}) para decidir propostas.`,
+        "operacao-grafo-falhou": `A operação no grafo falhou e a proposta segue pendente: ${r.detalhe ?? "erro desconhecido"}`,
       } as const;
       return {
         usuario: usuario.id, nivel: usuario.nivel, rank,
@@ -453,7 +475,8 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     }
     const p = r.proposta!;
     const resposta = p.status === "aprovada"
-      ? `Proposta ${p.id} APROVADA por ${p.decididaPor}. Decisão consolidada na memória (decisao-${p.id}).`
+      ? `Proposta ${p.id} APROVADA por ${p.decididaPor}. Decisão consolidada na memória (decisao-${p.id}).` +
+        (p.grafoAplicado && p.operacaoGrafo ? ` Grafo atualizado: ${descreverOperacao(p.operacaoGrafo)}.` : "")
       : `Proposta ${p.id} rejeitada por ${p.decididaPor}. Nada foi alterado.`;
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
@@ -485,12 +508,16 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
       buscarDocs: buscar,
       chamarLlm: (sistema, texto) => chamarGateway(sistema, texto, modeloParaNivel(usuario.nivel)),
     });
+    // Fase 4 — comando estruturado de edição do grafo vira operação executável (aplicada só na aprovação)
+    const operacao = parseOperacaoGrafo(input.texto, grafo);
+    if (operacao) rascunho.operacaoGrafo = operacao;
     const proposta = criarProposta(raiz, rascunho);
     const resposta =
       `🧠 Proposta ${proposta.id} criada e PARADA NO FREIO (nada foi alterado).\n\n` +
       `Nó-alvo: ${proposta.tituloAlvo} (${proposta.noAlvo})\n` +
-      `Cascata: ${proposta.cascata.length ? proposta.cascata.map((c) => c.titulo).join(", ") : "nenhuma"}\n\n` +
-      `${proposta.propostaTexto}\n\nPerguntas em aberto:\n` +
+      `Cascata: ${proposta.cascata.length ? proposta.cascata.map((c) => c.titulo).join(", ") : "nenhuma"}\n` +
+      (operacao ? `Operação executável na aprovação: ${descreverOperacao(operacao)}\n` : "") +
+      `\n${proposta.propostaTexto}\n\nPerguntas em aberto:\n` +
       proposta.perguntas.map((q) => `- ${q}`).join("\n") +
       `\n\nPara decidir (diretor+): "aprovar proposta ${proposta.id}" ou "rejeitar proposta ${proposta.id}".`;
     return {
@@ -540,7 +567,7 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   );
 
   if (viaGateway) {
-    capturarNoIngestor(usuario.id, input.texto, viaGateway, contexto.map((d) => d.id));
+    capturarNoIngestor(usuario.id, input.texto, viaGateway, contexto.map((d) => d.id), maxSensibilidade(contexto));
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: contexto.map((d) => d.id), modo: "gateway", resposta: viaGateway,

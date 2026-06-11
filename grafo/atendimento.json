@@ -21,10 +21,18 @@
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
-      "memoria": ["papel-operador"],
+      "memoria": [
+        "papel-operador"
+      ],
       "metadados": {
-        "canais": ["ligacao", "whatsapp", "email"],
-        "sistemas": ["rsvp"]
+        "canais": [
+          "ligacao",
+          "whatsapp",
+          "email"
+        ],
+        "sistemas": [
+          "rsvp"
+        ]
       }
     },
     {
@@ -65,12 +73,26 @@
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
-      "memoria": ["sla-rsvp"],
+      "memoria": [
+        "sla-rsvp"
+      ],
       "metadados": {
         "regras": [
-          { "prioridade": "critica", "prazo_horas": 2, "gatilho": "evento em <48h" },
-          { "prioridade": "alta", "prazo_horas": 8, "gatilho": "evento em <7d" },
-          { "prioridade": "normal", "prazo_horas": 24, "gatilho": "demais casos" }
+          {
+            "prioridade": "critica",
+            "prazo_horas": 2,
+            "gatilho": "evento em <48h"
+          },
+          {
+            "prioridade": "alta",
+            "prazo_horas": 8,
+            "gatilho": "evento em <7d"
+          },
+          {
+            "prioridade": "normal",
+            "prazo_horas": 24,
+            "gatilho": "demais casos"
+          }
         ],
         "cor_estouro": "vermelho",
         "cor_resolvido": "verde"
@@ -84,7 +106,9 @@
       "dominio": "atendimento-rsvp",
       "sensibilidade": "interno",
       "status": "ativo",
-      "memoria": ["sla-rsvp"]
+      "memoria": [
+        "sla-rsvp"
+      ]
     },
     {
       "id": "controle-de-salas",
@@ -98,17 +122,70 @@
     }
   ],
   "arestas": [
-    { "de": "atendimento-rsvp", "para": "papel-operador", "tipo": "contem" },
-    { "de": "atendimento-rsvp", "para": "papel-consultor", "tipo": "contem" },
-    { "de": "atendimento-rsvp", "para": "papel-especialista", "tipo": "contem" },
-    { "de": "atendimento-rsvp", "para": "papel-coordenador", "tipo": "contem" },
-    { "de": "atendimento-rsvp", "para": "bloco-sla-rsvp", "tipo": "contem" },
-    { "de": "papel-operador", "para": "papel-consultor", "tipo": "escala-para", "label": "não resolveu" },
-    { "de": "papel-consultor", "para": "papel-especialista", "tipo": "escala-para", "label": "caso técnico" },
-    { "de": "papel-especialista", "para": "papel-coordenador", "tipo": "escala-para", "label": "exceção/decisão" },
-    { "de": "papel-operador", "para": "bloco-sla-rsvp", "tipo": "depende-de" },
-    { "de": "papel-operador", "para": "motor-sla", "tipo": "aciona", "label": "calcular prazo" },
-    { "de": "atendimento-rsvp", "para": "controle-de-salas", "tipo": "contem" },
-    { "de": "papel-operador", "para": "controle-de-salas", "tipo": "depende-de", "label": "consulta alocação" }
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-operador",
+      "tipo": "contem"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-consultor",
+      "tipo": "contem"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-especialista",
+      "tipo": "contem"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "papel-coordenador",
+      "tipo": "contem"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "bloco-sla-rsvp",
+      "tipo": "contem"
+    },
+    {
+      "de": "papel-operador",
+      "para": "papel-consultor",
+      "tipo": "escala-para",
+      "label": "não resolveu"
+    },
+    {
+      "de": "papel-consultor",
+      "para": "papel-especialista",
+      "tipo": "escala-para",
+      "label": "caso técnico"
+    },
+    {
+      "de": "papel-especialista",
+      "para": "papel-coordenador",
+      "tipo": "escala-para",
+      "label": "exceção/decisão"
+    },
+    {
+      "de": "papel-operador",
+      "para": "bloco-sla-rsvp",
+      "tipo": "depende-de"
+    },
+    {
+      "de": "papel-operador",
+      "para": "motor-sla",
+      "tipo": "aciona",
+      "label": "calcular prazo"
+    },
+    {
+      "de": "atendimento-rsvp",
+      "para": "controle-de-salas",
+      "tipo": "contem"
+    },
+    {
+      "de": "papel-operador",
+      "para": "controle-de-salas",
+      "tipo": "depende-de",
+      "label": "consulta alocação"
+    }
   ]
 }
