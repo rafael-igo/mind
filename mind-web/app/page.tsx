@@ -28,6 +28,7 @@ export default function Painel() {
   const [idsNos, setIdsNos] = useState<string[]>([]);
   const [saude, setSaude] = useState<{ gateway: boolean; ollama: boolean; vetorial: { chunks: number | null } } | null>(null);
   const [criador, setCriador] = useState<AreaCriador | null>(null);
+  const [foco, setFoco] = useState<{ id: string; titulo: string } | null>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -109,6 +110,27 @@ export default function Painel() {
     return () => el.removeEventListener("click", fn);
   }, [idsNos]);
 
+  // ---- Foco (card → chat): o HUMANO pergunta; a Mind anexa o contexto do nó.
+  // Sem chamada de LLM aqui — só orientação local para o usuário saber o que dá pra fazer.
+  function focarNoChat() {
+    if (!detalhe) return;
+    const d = detalhe;
+    setFoco({ id: d.no.id, titulo: d.no.titulo });
+    setDetalhe(null);
+    const orientacao =
+      `🎯 Nó em foco: ${d.no.titulo} (${d.no.tipo} · ${d.no.status})\n` +
+      (d.no.descricao ? `${d.no.descricao}\n` : "") +
+      `Ligações: ${d.arestas.length} · Memória ligada: ${d.memoria.length} doc(s)\n\n` +
+      `Pode perguntar qualquer coisa — vou responder com o contexto deste nó. Sugestões:\n` +
+      `· "o que quebra se eu mexer aqui?" — impacto em cascata\n` +
+      `· "explica o nó ${d.no.id}" — ficha completa com as regras registradas\n` +
+      `· descreva uma mudança ("ajustar/alterar…") — vira proposta e PARA no freio\n` +
+      (eu?.nivel === "criador" ? `· "brainstorm: …" — explorar ideias (Área do Criador)\n` : "") +
+      `Para soltar o foco, clique no ✕ ao lado do campo de texto.`;
+    setMensagens((m) => [...m, { de: "mind", texto: orientacao, meta: "foco · sem custo de LLM" }]);
+    setTimeout(() => chatRef.current?.scrollTo({ top: 1e9, behavior: "smooth" }), 50);
+  }
+
   // ---- Chat (os botões da Área do Criador passam pelo MESMO orquestrador via `comando`)
   async function enviar(comando?: string) {
     const pergunta = (comando ?? texto).trim();
@@ -120,7 +142,7 @@ export default function Painel() {
       const r = await fetch("/api/perguntar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ texto: pergunta }), // identidade vem da sessão, não do corpo
+        body: JSON.stringify({ texto: pergunta, foco: foco?.id }), // identidade vem da sessão, não do corpo
       });
       const j = await r.json();
       setMensagens((m) => [...m, {
@@ -198,10 +220,10 @@ export default function Painel() {
               {detalhe.no.tipo} · {detalhe.no.sensibilidade} · {detalhe.no.status} · <code>{detalhe.no.id}</code>
             </div>
             {detalhe.no.descricao && <p style={{ fontSize: 13, marginTop: 8 }}>{detalhe.no.descricao}</p>}
-            <button onClick={() => enviar(`explica o nó ${detalhe.no.id}`)} disabled={pensando}
+            <button onClick={() => focarNoChat()} disabled={pensando}
               style={{ width: "100%", marginTop: 8, padding: "8px 12px", borderRadius: 8, border: 0,
                 background: "#6366f1", color: "white", cursor: "pointer", fontSize: 13 }}>
-              💬 debater no chat
+              🎯 focar no chat
             </button>
             <div style={{ fontSize: 12, marginTop: 8 }}>
               <b>Ligações</b>
@@ -301,10 +323,18 @@ export default function Painel() {
           ))}
           {pensando && <div style={{ opacity: 0.6, fontSize: 13 }}>pensando…</div>}
         </div>
-        <footer style={{ padding: 12, borderTop: "1px solid #232a45", display: "flex", gap: 8 }}>
+        <footer style={{ padding: 12, borderTop: "1px solid #232a45", display: "flex", gap: 8, alignItems: "center" }}>
+          {foco && (
+            <span title={`as perguntas vão com o contexto do nó ${foco.id}`}
+              style={{ fontSize: 12, padding: "6px 10px", borderRadius: 16, background: "#3b3f8f",
+                display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", maxWidth: 140 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>🎯 {foco.titulo}</span>
+              <span onClick={() => setFoco(null)} style={{ cursor: "pointer", opacity: 0.7 }}>✕</span>
+            </span>
+          )}
           <input value={texto} onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && enviar()}
-            placeholder="Fale com a Mind…"
+            placeholder={foco ? `Pergunte sobre "${foco.titulo}"…` : "Fale com a Mind…"}
             style={{ flex: 1, padding: 10, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }} />
           <button onClick={() => enviar()} disabled={pensando}
             style={{ padding: "10px 16px", borderRadius: 8, border: 0, background: "#6366f1", color: "white", cursor: "pointer" }}>

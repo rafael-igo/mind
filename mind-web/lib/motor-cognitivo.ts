@@ -139,8 +139,10 @@ export async function montarProposta(args: {
   memoria: DocMemoria[];
   buscarDocs: (texto: string, docs: DocMemoria[]) => { doc: DocMemoria; score: number }[];
   chamarLlm?: (sistema: string, usuario: string) => Promise<string | null>;
+  /** Nó-alvo forçado (ex.: nó em foco no painel) — pula a inferência por texto. */
+  noAlvo?: No;
 }): Promise<PropostaRascunho> {
-  const alvo = encontrarNoAlvo(args.pedido, args.grafo);
+  const alvo = args.noAlvo ?? encontrarNoAlvo(args.pedido, args.grafo);
   const cascata = cascataDe(args.grafo, alvo.id);
   const relacionados = args.buscarDocs(args.pedido, args.memoria).slice(0, 3).map((a) => a.doc);
 

@@ -199,6 +199,24 @@ const r22 = await orquestrar({ usuario: "rafael", texto: "debater o nó check-in
 ok(r22.permitido && r22.contexto.includes("check-in-nfc") && r22.contexto.includes("processo-de-check-in-nfc"),
   "Card→chat — memória ligada ao nó entra no contexto do debate");
 
+// --- Nó em FOCO (card → chat): o humano pergunta, a Mind anexa o contexto do nó ---
+const r23 = await orquestrar({ usuario: "operador-exemplo", texto: "quem cuida disso aqui no dia a dia?", foco: "motor-sla" }, raiz);
+ok(r23.permitido && r23.contexto[0] === "motor-sla" && r23.modo !== "sem-memoria",
+  "Foco — pergunta livre com nó em foco responde com a ficha (não cai em 'sem memória')");
+
+const r24 = await orquestrar({ usuario: "rafael", texto: "o que quebra se eu mexer aqui?", foco: "check-in-nfc" }, raiz);
+ok(r24.modo === "cascata" && r24.contexto[0] === "check-in-nfc" && r24.resposta.includes("⤫"),
+  "Foco — 'o que quebra se eu mexer aqui?' usa o nó em foco como alvo da cascata");
+
+const r25 = await orquestrar({ usuario: "rafael", texto: "ajustar o prazo de sincronização para 2 minutos", foco: "bloco-regras-checkin" }, raiz);
+ok(r25.modo === "freio-proposta" && r25.resposta.includes("Regras de Check-in"),
+  "Foco — pedido de mudança com foco mira o nó focado (proposta no freio)");
+fs.rmSync(path.join(raiz, "operacao", "propostas", `${r25.contexto[0]}.json`), { force: true });
+
+const r26 = await orquestrar({ usuario: "operador-exemplo", texto: "me explica isso", foco: "papel-coordenador" }, raiz);
+ok(!r26.permitido && r26.modo === "negado",
+  "Foco — nó restrito em foco NEGado para operador (foco não fura permissão)");
+
 // --- Autenticação: senha (scrypt) e token de sessão (HMAC) ---
 const { hashSenha, verificarSenha, criarToken, verificarToken } = await import("../lib/auth.ts");
 const hSenha = hashSenha("teste-123");

@@ -490,6 +490,22 @@ function parseComandoNo(texto: string): { id: string } | null {
   return m ? { id: m[1] } : null;
 }
 
+/** Ficha determinística de um nó: o contexto que vai junto quando o nó está em foco/debate. */
+function fichaDoNo(grafo: Grafo, no: No): string {
+  const ligacoes = grafo.arestas
+    .filter((a) => a.de === no.id || a.para === no.id)
+    .map((a) => {
+      const outroId = a.de === no.id ? a.para : a.de;
+      const outro = grafo.nos.find((n) => n.id === outroId);
+      return `- ${a.de === no.id ? "→" : "←"} ${outro?.titulo ?? outroId} (${a.tipo}${a.label ? `: ${a.label}` : ""})`;
+    });
+  return (
+    `Nó "${no.titulo}" (${no.id}) — tipo ${no.tipo} · status ${no.status} · domínio ${no.dominio ?? no.id} · sensibilidade ${no.sensibilidade}` +
+    (no.descricao ? `\n${no.descricao}` : "") +
+    (ligacoes.length ? `\nLigações:\n${ligacoes.join("\n")}` : "\nSem ligações no grafo.")
+  );
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -499,6 +515,8 @@ const SYSTEM_PROMPT =
 export interface PerguntaInput {
   usuario: string;
   texto: string;
+  /** Nó em foco (card → chat): a pergunta do humano vai com a ficha deste nó como contexto. */
+  foco?: string;
 }
 
 export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz()): Promise<RespostaOrquestrador> {
@@ -628,17 +646,8 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
           resposta: "Esse nó existe, mas seu nível de acesso não permite consultá-lo.",
         };
       }
-      const arestas = grafo.arestas.filter((a) => a.de === no.id || a.para === no.id);
-      const ligacoes = arestas.map((a) => {
-        const outroId = a.de === no.id ? a.para : a.de;
-        const outro = grafo.nos.find((n) => n.id === outroId);
-        return `- ${a.de === no.id ? "→" : "←"} ${outro?.titulo ?? outroId} (${a.tipo}${a.label ? `: ${a.label}` : ""})`;
-      });
       const docs = memoria.filter((d) => (no.memoria ?? []).includes(d.id) && podeVer(perm, usuario, d.sensibilidade, d.tags));
-      const ficha =
-        `Nó "${no.titulo}" (${no.id}) — tipo ${no.tipo} · status ${no.status} · domínio ${no.dominio ?? no.id} · sensibilidade ${no.sensibilidade}` +
-        (no.descricao ? `\n${no.descricao}` : "") +
-        (ligacoes.length ? `\nLigações:\n${ligacoes.join("\n")}` : "\nSem ligações no grafo.");
+      const ficha = fichaDoNo(grafo, no);
       const blocoDocs = docs.map((d) => `### ${d.titulo} (${d.id})\n${d.corpo.slice(0, 1200)}`).join("\n\n");
       const viaGateway = await chamarGateway(
         SYSTEM_PROMPT,
@@ -664,11 +673,23 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     // nó inexistente: segue o fluxo normal (busca na memória)
   }
 
+  // Nó em FOCO (card → chat): o humano pergunta; a Mind anexa a ficha do nó como contexto.
+  // Se o usuário não pode ver o nó, nega já aqui — o foco não fura permissão.
+  const grafoFoco = input.foco ? carregarGrafo(raiz) : null;
+  const focoNo = grafoFoco?.nos.find((n) => n.id === input.foco) ?? null;
+  if (focoNo && rank < (perm.sensibilidadeParaRankMinimo[focoNo.sensibilidade] ?? 0)) {
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: false,
+      contexto: [focoNo.id], modo: "negado",
+      resposta: "Esse nó existe, mas seu nível de acesso não permite consultá-lo.",
+    };
+  }
+
   // Fase 6 — view cruzada de cascata: análise de impacto transitiva, atravessando domínios.
   // Determinística (anda as arestas do grafo) e respeita sensibilidade dos nós.
   if (pedeCascata(input.texto)) {
-    const grafo = carregarGrafo(raiz);
-    const alvo = encontrarNoAlvo(input.texto, grafo);
+    const grafo = grafoFoco ?? carregarGrafo(raiz);
+    const alvo = focoNo ?? encontrarNoAlvo(input.texto, grafo);
     const niveis = cascataTransitiva(grafo, alvo.id, 3).map((nv) => ({
       ...nv,
       itens: nv.itens.filter((i) => {
@@ -708,12 +729,13 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
 
   // Fase 3 — pedido de mudança: motor cognitivo raciocina a cascata e a proposta PARA no freio.
   if (pedeMudanca(input.texto)) {
-    const grafo = carregarGrafo(raiz);
+    const grafo = grafoFoco ?? carregarGrafo(raiz);
     const rascunho = await montarProposta({
       pedido: input.texto,
       autor: usuario.id,
       nivel: usuario.nivel,
       grafo,
+      noAlvo: focoNo ?? undefined, // nó em foco vira o alvo da mudança
       memoria: memoria.filter((d) => podeVer(perm, usuario, d.sensibilidade, d.tags)),
       buscarDocs: buscar,
       chamarLlm: (sistema, texto) => chamarGateway(sistema, texto, modeloParaNivel(usuario.nivel)),
@@ -755,7 +777,7 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     achados.sort((a, b) => b.score - a.score);
   }
 
-  if (achados.length === 0) {
+  if (achados.length === 0 && !focoNo) {
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: [], modo: "sem-memoria",
@@ -765,7 +787,7 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
 
   // Permissão determinística: se o MELHOR match é bloqueado, nega (não cai num doc fraco visível)
   const topo = achados[0];
-  if (!podeVer(perm, usuario, topo.doc.sensibilidade, topo.doc.tags)) {
+  if (topo && !podeVer(perm, usuario, topo.doc.sensibilidade, topo.doc.tags)) {
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: false,
       contexto: [topo.doc.id], modo: "negado",
@@ -777,15 +799,26 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     .filter((a) => podeVer(perm, usuario, a.doc.sensibilidade, a.doc.tags))
     .slice(0, 3)
     .map((a) => a.doc);
-  const blocoContexto = contexto
-    .map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`)
-    .join("\n\n");
+
+  // Nó em foco: a ficha + a memória ligada ao nó entram SEMPRE no contexto da pergunta.
+  const docsFoco = focoNo
+    ? memoria.filter((d) => (focoNo.memoria ?? []).includes(d.id) &&
+        !contexto.some((c) => c.id === d.id) &&
+        podeVer(perm, usuario, d.sensibilidade, d.tags))
+    : [];
+  const ficha = focoNo && grafoFoco ? fichaDoNo(grafoFoco, focoNo) : "";
+  const blocoContexto =
+    (ficha ? `### Nó em foco (grafo — fonte da verdade)\n${ficha}\n\n` : "") +
+    [...docsFoco, ...contexto].map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`).join("\n\n");
+  const idsContexto = [...(focoNo ? [focoNo.id] : []), ...docsFoco.map((d) => d.id), ...contexto.map((d) => d.id)];
 
   // Fala: tenta o gateway; se não houver, modo offline (prova recuperação + permissão)
   // O controle de acesso é determinístico e já aconteceu acima — o LLM não deve recusar por confidencialidade.
   const viaGateway = await chamarGateway(
     SYSTEM_PROMPT,
-    `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel}): ${input.texto}\n\n` +
+    `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel})` +
+      (focoNo ? ` — com o nó "${focoNo.titulo}" em foco no painel` : "") +
+      `: ${input.texto}\n\n` +
       `A Mind já verificou as permissões: este usuário PODE ver todos os documentos do contexto abaixo. ` +
       `Responda a pergunta normalmente, sem recusar por sensibilidade ou confidencialidade.\n\n` +
       `Contexto da memória:\n${blocoContexto}`,
@@ -793,17 +826,21 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   );
 
   if (viaGateway) {
-    capturarNoIngestor(usuario.id, input.texto, viaGateway, contexto.map((d) => d.id), maxSensibilidade(contexto));
+    const sensFoco = focoNo ? SENS.indexOf(focoNo.sensibilidade) : 0;
+    const sensMax = Math.max(sensFoco, SENS.indexOf(maxSensibilidade([...docsFoco, ...contexto])));
+    capturarNoIngestor(usuario.id, input.texto, viaGateway, idsContexto, SENS[sensMax] as Sensibilidade);
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
-      contexto: contexto.map((d) => d.id), modo: "gateway", resposta: viaGateway,
+      contexto: idsContexto, modo: "gateway", resposta: viaGateway,
     };
   }
 
-  const primeiraLinha = contexto[0].corpo.split("\n").find((l) => l.trim().length > 0) ?? "";
+  const melhorDoc = contexto[0] ?? docsFoco[0];
+  const resposta = melhorDoc
+    ? `[offline] Encontrei na memória: "${melhorDoc.titulo}". ${melhorDoc.corpo.split("\n").find((l) => l.trim().length > 0) ?? ""}`
+    : `[offline] ${ficha}`;
   return {
     usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
-    contexto: contexto.map((d) => d.id), modo: "offline",
-    resposta: `[offline] Encontrei na memória: "${contexto[0].titulo}". ${primeiraLinha}`,
+    contexto: idsContexto, modo: "offline", resposta,
   };
 }
