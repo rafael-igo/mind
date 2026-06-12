@@ -93,26 +93,21 @@ export default function Painel() {
     return () => clearInterval(t);
   }, [eu]);
 
-  // ---- Clique no nó: o id do nó vem no id do <g class="node"> gerado pelo Mermaid
+  // ---- Clique no nó: DELEGAÇÃO no container (um listener só) — sobrevive a qualquer
+  // re-render do Mermaid; listeners por nó morriam quando o SVG era trocado por baixo.
   useEffect(() => {
     const el = grafoRef.current;
     if (!el) return;
-    const abrir = async (id: string) => {
-      const r = await fetch(`/api/no/${id}`);
-      if (r.ok) setDetalhe(await r.json());
-    };
-    const nodes = el.querySelectorAll<SVGGElement>("g.node");
-    const handlers: { n: SVGGElement; fn: () => void }[] = [];
-    nodes.forEach((n) => {
-      const id = idsNos.find((i) => n.id.includes(`-${i}-`) || n.id.endsWith(`-${i}`) || n.id.includes(`flowchart-${i}`));
+    const fn = (ev: Event) => {
+      const g = (ev.target as Element).closest?.("g.node");
+      if (!g) return;
+      const id = idsNos.find((i) => g.id.includes(`-${i}-`) || g.id.endsWith(`-${i}`) || g.id.includes(`flowchart-${i}`));
       if (!id) return;
-      n.style.cursor = "pointer";
-      const fn = () => abrir(id);
-      n.addEventListener("click", fn);
-      handlers.push({ n, fn });
-    });
-    return () => handlers.forEach(({ n, fn }) => n.removeEventListener("click", fn));
-  }, [svg, idsNos]);
+      fetch(`/api/no/${id}`).then(async (r) => { if (r.ok) setDetalhe(await r.json()); });
+    };
+    el.addEventListener("click", fn);
+    return () => el.removeEventListener("click", fn);
+  }, [idsNos]);
 
   // ---- Chat (os botões da Área do Criador passam pelo MESMO orquestrador via `comando`)
   async function enviar(comando?: string) {
@@ -188,6 +183,7 @@ export default function Painel() {
             </span>
           )}
         </header>
+        <style>{"g.node { cursor: pointer } g.node:hover { opacity: 0.85 }"}</style>
         <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
           style={{ padding: 20, minHeight: "70vh", display: "flex", justifyContent: "center" }} />
 
