@@ -1,6 +1,6 @@
 ---
 id: chat-20260611-173651-ana-operadora
-comunidade: recente
+comunidade: profunda
 titulo: 'Chat — ana.operadora: qual o SLA do aereo?'
 tipo: chat
 dominio: geral
@@ -10,6 +10,7 @@ nos: []
 relacionados: [sla-rsvp]
 fonte: chat-mind
 atualizado_em: '2026-06-11'
+consolidado_em: 2026-06-12
 ---
 
 # Chat — ana.operadora: qual o SLA do aereo?

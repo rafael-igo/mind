@@ -45,43 +45,29 @@ export default function Painel() {
   const arquivoRef = useRef<HTMLInputElement>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  // ---- Pan/zoom do grafo: a "lente" recebe um transform; o viewport captura gestos.
+  // ---- Pan/zoom do grafo via lib `panzoom` (anvaka): wheel suave com inércia, pinça
+  // touch nativa, dblclick pra aproximar. O transform é SVG (no <g> raiz) => texto nítido.
   const vpRef = useRef<HTMLDivElement>(null);
-  const lenteRef = useRef<HTMLDivElement>(null);
-  const vistaRef = useRef({ x: 0, y: 0, k: 1 });
+  const panZoomRef = useRef<ReturnType<typeof import("panzoom").default> | null>(null);
+  const gRef = useRef<SVGGElement | null>(null);
   const arrastouRef = useRef(false); // suprime o clique-no-nó logo após um arrasto
-
-  const aplicarVista = useCallback(() => {
-    const v = vistaRef.current;
-    if (lenteRef.current) lenteRef.current.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.k})`;
-  }, []);
-
-  /** Zoom mantendo o ponto (cx,cy) do viewport parado na tela. */
-  const zoomNoPonto = useCallback((fator: number, cx: number, cy: number) => {
-    const v = vistaRef.current;
-    const k = Math.min(4, Math.max(0.15, v.k * fator));
-    const f = k / v.k;
-    vistaRef.current = { k, x: cx - (cx - v.x) * f, y: cy - (cy - v.y) * f };
-    aplicarVista();
-  }, [aplicarVista]);
 
   /** Enquadra o diagrama inteiro no viewport (também é o "reset"). */
   const ajustarVista = useCallback(() => {
-    const vp = vpRef.current, lente = lenteRef.current;
-    if (!vp || !lente) return;
-    vistaRef.current = { x: 0, y: 0, k: 1 };
-    aplicarVista();
-    const r = lente.getBoundingClientRect(), a = vp.getBoundingClientRect();
-    if (!r.width || !r.height || !a.width || !a.height) return;
-    const k = Math.min(a.width / r.width, a.height / r.height, 1.6) * 0.93;
-    vistaRef.current = { k, x: (a.width - r.width * k) / 2, y: (a.height - r.height * k) / 2 };
-    aplicarVista();
-  }, [aplicarVista]);
+    const inst = panZoomRef.current, vp = vpRef.current, gEl = gRef.current;
+    if (!inst || !vp || !gEl) return;
+    const bb = gEl.getBBox(); // geometria local do <g>, sem o transform do panzoom
+    const a = vp.getBoundingClientRect();
+    if (!bb.width || !bb.height || !a.width || !a.height) return;
+    const k = Math.min(a.width / bb.width, a.height / bb.height, 1.6) * 0.92;
+    inst.zoomAbs(0, 0, k);
+    inst.moveTo((a.width - bb.width * k) / 2 - bb.x * k, (a.height - bb.height * k) / 2 - bb.y * k);
+  }, []);
 
   const zoomCentro = useCallback((fator: number) => {
-    const a = vpRef.current?.getBoundingClientRect();
-    if (a) zoomNoPonto(fator, a.width / 2, a.height / 2);
-  }, [zoomNoPonto]);
+    const inst = panZoomRef.current, a = vpRef.current?.getBoundingClientRect();
+    if (inst && a) inst.smoothZoom(a.width / 2, a.height / 2, fator);
+  }, []);
 
   // ---- Sessão: quem sou eu? (cookie HTTP-only assinado; sem sessão => tela de login)
   useEffect(() => {
@@ -145,85 +131,61 @@ export default function Painel() {
     return () => clearInterval(t);
   }, [eu]);
 
-  // ---- Gestos do grafo: wheel = zoom (pinça de trackpad manda wheel com ctrlKey),
-  // 1 ponteiro = pan, 2 ponteiros = pinça touch. Listeners nativos (preventDefault no wheel).
+  // ---- Pan/zoom: instancia o panzoom no <g> raiz do SVG sempre que o Mermaid re-renderiza
+  // (ou ao voltar da memória) e já enquadra o diagrama na tela.
+  useEffect(() => {
+    if (!svg || memAberta) return;
+    let inst: ReturnType<typeof import("panzoom").default> | null = null;
+    let vivo = true;
+    (async () => {
+      const panzoom = (await import("panzoom")).default;
+      const svgEl = grafoRef.current?.querySelector("svg");
+      const gEl = svgEl?.querySelector("g");
+      if (!vivo || !svgEl || !gEl) return;
+      // sem viewBox, 1 unidade SVG = 1px — o fit do ajustarVista fica exato
+      svgEl.removeAttribute("viewBox");
+      Object.assign(svgEl.style, { maxWidth: "none", width: "100%", height: "100%", display: "block" });
+      inst = panzoom(gEl, {
+        maxZoom: 6,
+        minZoom: 0.1,
+        zoomSpeed: 0.18,        // wheel mais suave
+        smoothScroll: true,      // inércia no pan
+        zoomDoubleClickSpeed: 1.8,
+        bounds: false,
+      });
+      panZoomRef.current = inst;
+      gRef.current = gEl as SVGGElement;
+      ajustarVista();
+    })();
+    return () => {
+      vivo = false;
+      inst?.dispose();
+      panZoomRef.current = null;
+      gRef.current = null;
+    };
+  }, [svg, memAberta, ajustarVista]);
+
+  // Distinção arrasto × clique: o panzoom não suprime o click que o browser dispara após um pan.
   useEffect(() => {
     if (memAberta) return;
     const vp = vpRef.current;
     if (!vp) return;
-    const ponteiros = new Map<number, { x: number; y: number }>();
-    let distAnt = 0;
-    let moveu = false;
-    const pos = (e: PointerEvent) => {
-      const r = vp.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
-    };
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const r = vp.getBoundingClientRect();
-      // pinça do trackpad chega como wheel+ctrlKey com deltas pequenos => sensibilidade maior
-      const fator = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022));
-      zoomNoPonto(fator, e.clientX - r.left, e.clientY - r.top);
-    };
-    const onDown = (e: PointerEvent) => {
-      vp.setPointerCapture(e.pointerId);
-      ponteiros.set(e.pointerId, pos(e));
-      if (ponteiros.size === 2) {
-        const [a, b] = [...ponteiros.values()];
-        distAnt = Math.hypot(a.x - b.x, a.y - b.y);
-      }
-      moveu = false;
-      vp.style.cursor = "grabbing";
-    };
-    const onMove = (e: PointerEvent) => {
-      const ant = ponteiros.get(e.pointerId);
-      if (!ant) return;
-      const p = pos(e);
-      ponteiros.set(e.pointerId, p);
-      if (ponteiros.size === 1) {
-        const dx = p.x - ant.x, dy = p.y - ant.y;
-        if (Math.abs(dx) + Math.abs(dy) > 2) moveu = true;
-        vistaRef.current.x += dx;
-        vistaRef.current.y += dy;
-        aplicarVista();
-      } else if (ponteiros.size === 2) {
-        const [a, b] = [...ponteiros.values()];
-        const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        if (distAnt > 0) zoomNoPonto(dist / distAnt, (a.x + b.x) / 2, (a.y + b.y) / 2);
-        distAnt = dist;
-        moveu = true;
-      }
-    };
+    let x0 = 0, y0 = 0;
+    const onDown = (e: PointerEvent) => { x0 = e.clientX; y0 = e.clientY; vp.style.cursor = "grabbing"; };
     const onUp = (e: PointerEvent) => {
-      ponteiros.delete(e.pointerId);
-      distAnt = 0;
       vp.style.cursor = "grab";
-      if (moveu) {
-        // o click dispara logo após o pointerup; o timeout 0 libera a flag em seguida
-        arrastouRef.current = true;
+      if (Math.hypot(e.clientX - x0, e.clientY - y0) > 5) {
+        arrastouRef.current = true; // o click dispara logo após o pointerup
         setTimeout(() => { arrastouRef.current = false; }, 0);
       }
     };
-    vp.addEventListener("wheel", onWheel, { passive: false });
     vp.addEventListener("pointerdown", onDown);
-    vp.addEventListener("pointermove", onMove);
     vp.addEventListener("pointerup", onUp);
-    vp.addEventListener("pointercancel", onUp);
     return () => {
-      vp.removeEventListener("wheel", onWheel);
       vp.removeEventListener("pointerdown", onDown);
-      vp.removeEventListener("pointermove", onMove);
       vp.removeEventListener("pointerup", onUp);
-      vp.removeEventListener("pointercancel", onUp);
     };
-  }, [memAberta, aplicarVista, zoomNoPonto]);
-
-  // Diagrama novo (ou voltou da memória) => enquadra na tela
-  useEffect(() => {
-    if (!svg || memAberta) return;
-    const raf = requestAnimationFrame(() => ajustarVista());
-    return () => cancelAnimationFrame(raf);
-  }, [svg, memAberta, ajustarVista]);
+  }, [memAberta]);
 
   // ---- Clique no nó: DELEGAÇÃO no container (um listener só) — sobrevive a qualquer
   // re-render do Mermaid; listeners por nó morriam quando o SVG era trocado por baixo.
@@ -523,9 +485,8 @@ export default function Painel() {
           <div ref={vpRef}
             style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden",
               touchAction: "none", cursor: "grab", userSelect: "none" }}>
-            <div ref={lenteRef} style={{ transformOrigin: "0 0", width: "fit-content" }}>
-              <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }} />
-            </div>
+            <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
+              style={{ width: "100%", height: "100%" }} />
             {/* controles de zoom (o scroll/pinça também funciona em cima do grafo) */}
             <div style={{ position: "absolute", right: 14, bottom: 14, display: "flex",
               flexDirection: "column", gap: 6, zIndex: 2 }}>
