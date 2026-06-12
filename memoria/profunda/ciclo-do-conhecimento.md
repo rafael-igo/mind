@@ -31,7 +31,7 @@ Nada vira verdade sem decisão humana. Cada seta é uma aprovação de **diretor
 | **4. Homologação** | aprovado para `recente/` — entra na busca, em observação | curadoria humana (diretor+) via painel 📚 | nenhum |
 | **5. Consolidação** | homologado vira conhecimento em `profunda/` | curadoria humana (botão consolidar) · futuro **motor-consolidacao** ("o sono": propõe consolidações via freio) | futuro: modelo forte para propor fusões/resumos |
 | **6. Indexação** | embeddings incrementais por hash a cada escrita | `indexarMemoria` (chunks 1000/200, pgvector) | **Ollama `nomic-embed-text`** (768 dims, local, liga sob demanda) |
-| **7. Recuperação** | busca híbrida (lexical + vetorial), `podeVer()` SEMPRE depois; segue `relacionados:`/[[wikilinks]] (1 salto) | orquestrador | nenhum (busca é determinística) |
+| **7. Recuperação** | busca híbrida (lexical + vetorial), `podeVer()` SEMPRE depois; segue `relacionados:` e wikilinks (1 salto) | orquestrador | nenhum (busca é determinística) |
 | **8. Fala/cognição** | resposta de gerente: REGISTRO × RECOMENDAÇÃO, trilha de escalonamento do grafo, oferece `registrar:` | orquestrador + grafo | por nível: operador/consultor → **Haiku 4.5** · coordenador/RH → **Sonnet 4.6** · diretor → **Opus 4.8** · criador → **Fable 5** (via gateway 4101: auditoria, budget) |
 | **9. Mudança da verdade** | grafo/decisões só mudam por proposta **PARADA NO FREIO** | motor-cognitivo · freio · grafo-editor | modelo do nível redige a proposta; quem decide é humano |
 

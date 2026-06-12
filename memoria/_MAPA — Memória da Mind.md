@@ -15,8 +15,8 @@ pode afirmar com confiança. O que não está registrado, ela diz que não há r
 
 | Camada | Pasta | O que é | Quem escreve |
 |---|---|---|---|
-| 🧠 [[_comunidade-profunda\|Profunda]] | `profunda/` | Memória **semântica** — conhecimento consolidado e curado | consolidação aprovada (freio) |
-| ⚡ [[_comunidade-recente\|Recente]] | `recente/` | Memória **episódica** — capturas de chat, notas rápidas e `decisao-*` aprovadas no freio | mind-ingestor + freio da Mind |
+| 🧠 [[_Comunidade — Profunda\|Profunda]] | `profunda/` | Memória **semântica** — conhecimento consolidado e curado | consolidação aprovada (freio) |
+| ⚡ [[_Comunidade — Recente\|Recente]] | `recente/` | Memória **episódica** — capturas de chat, notas rápidas e `decisao-*` aprovadas no freio | mind-ingestor + freio da Mind |
 | 📥 Inbox | `_inbox/` | **Pré-memória** — convertido pelo ingestor, aguardando aprovação. *Invisível para a Mind* | mind-ingestor |
 
 Fluxo de consolidação: **chat/nota → `_inbox/` → aprovação → `recente/` → consolidação → `profunda/`**.

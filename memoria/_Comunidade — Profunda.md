@@ -9,7 +9,6 @@ gerado_por: mind-ingestor (atualizar_hubs)
 Conhecimento consolidado e curado — a Mind responde a partir daqui com confiança.
 
 - [[cascata-logistica]]
-- [[chat-20260611-173651-ana-operadora]]
 - [[ciclo-do-conhecimento]]
 - [[papeis-raci-rsvp]]
 - [[papel-operador]]
