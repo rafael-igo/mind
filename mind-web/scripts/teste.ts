@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { carregarGrafo, carregarMemoria, orquestrar, resolverDadosRaiz, sensibilidadeDoMeta } from "../lib/core.ts";
+import { carregarGrafo, carregarMemoria, carregarPermissoes, grafoVisivel, orquestrar, resolverDadosRaiz, sensibilidadeDoMeta } from "../lib/core.ts";
 import { calcularSla } from "../lib/motor-sla.ts";
 import { gerarMermaid } from "../lib/projecao.ts";
 import { parseOperacaoGrafo } from "../lib/grafo-editor.ts";
@@ -293,6 +293,23 @@ ok(!carregarMemoria(raiz).some((d) => d.id === novoDoc.id) && fs.readdirSync(pat
 fs.rmSync(up.arquivo, { force: true });
 for (const f of fs.readdirSync(path.join(raiz, "memoria", "_lixeira")).filter((f) => f.includes(novoDoc.id)))
   fs.rmSync(path.join(raiz, "memoria", "_lixeira", f), { force: true });
+
+// --- Governança do grafo: cada nível vê o SEU grafo (auditoria 12/jun) ---
+{
+  const perm = carregarPermissoes(raiz);
+  const gTudo = carregarGrafo(raiz);
+  const operador = perm.usuarios.find((u) => u.id === "operador-exemplo")!;
+  const dono = perm.usuarios.find((u) => u.id === "rafael")!;
+  const gOp = grafoVisivel(gTudo, perm, operador);
+  ok(!gOp.nos.some((n) => n.id === "papel-coordenador") && !gOp.nos.some((n) => n.id === "area-do-criador") &&
+    !gOp.arestas.some((a) => a.de === "papel-coordenador" || a.para === "papel-coordenador") &&
+    grafoVisivel(gTudo, perm, dono).nos.some((n) => n.id === "papel-coordenador"),
+    "Governança — projeção por nível: operador não vê nó restrito/confidencial (nem as arestas); o dono vê tudo");
+
+  const rTrilha = await orquestrar({ usuario: "operador-exemplo", texto: "convidado pendente, qual o próximo passo?" }, raiz);
+  ok(rTrilha.resposta.includes("escala para") && !rTrilha.resposta.includes("Gestão de fila"),
+    "Governança — trilha de escalonamento para operador NÃO vaza descrição de papel restrito");
+}
 
 // --- Fase 7: conversa com memória de sessão (follow-up resolve pelo histórico) ---
 const r30 = await orquestrar({

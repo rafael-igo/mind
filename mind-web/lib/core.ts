@@ -283,6 +283,18 @@ export function rankDe(p: Permissoes, nivelId: string): number {
   return p.niveis.find((n) => n.id === nivelId)?.rank ?? 0;
 }
 
+/**
+ * Projeção do grafo VISÍVEL ao usuário: nós com sensibilidade acima do rank somem
+ * (e as arestas que os tocam, junto). É a peça única de governança do grafo —
+ * painel, cascata e trilha de gestão enxergam o MESMO recorte.
+ */
+export function grafoVisivel(g: Grafo, perm: Permissoes, usuario: Usuario): Grafo {
+  const rank = rankDe(perm, usuario.nivel);
+  const nos = g.nos.filter((n) => rank >= (perm.sensibilidadeParaRankMinimo[n.sensibilidade] ?? 0));
+  const ids = new Set(nos.map((n) => n.id));
+  return { nos, arestas: g.arestas.filter((a) => ids.has(a.de) && ids.has(a.para)) };
+}
+
 /** Regra de acesso: rank >= mínimo da sensibilidade. Tag 'pessoas' exige RH ou rank>=50. */
 export function podeVer(p: Permissoes, usuario: Usuario, sensibilidade: Sensibilidade, tags: string[]): boolean {
   const rank = rankDe(p, usuario.nivel);
@@ -764,17 +776,11 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   }
 
   // Fase 6 — view cruzada de cascata: análise de impacto transitiva, atravessando domínios.
-  // Determinística (anda as arestas do grafo) e respeita sensibilidade dos nós.
+  // Roda sobre o grafo VISÍVEL ao usuário — nó restrito não aparece nem como vizinho.
   if (pedeCascata(input.texto)) {
-    const grafo = grafoFoco ?? carregarGrafo(raiz);
+    const grafo = grafoVisivel(grafoFoco ?? carregarGrafo(raiz), perm, usuario);
     const alvo = focoNo ?? encontrarNoAlvo(input.texto, grafo);
-    const niveis = cascataTransitiva(grafo, alvo.id, 3).map((nv) => ({
-      ...nv,
-      itens: nv.itens.filter((i) => {
-        const no = grafo.nos.find((n) => n.id === i.no)!;
-        return rank >= (perm.sensibilidadeParaRankMinimo[no.sensibilidade] ?? 0);
-      }),
-    })).filter((nv) => nv.itens.length > 0);
+    const niveis = cascataTransitiva(grafo, alvo.id, 3).filter((nv) => nv.itens.length > 0);
     const dominiosCruzados = [...new Set(niveis.flatMap((nv) => nv.itens.filter((i) => i.cruzaDominio).map((i) => i.dominio ?? "?")))];
     const resposta = niveis.length === 0
       ? `🌊 "${alvo.titulo}" (${alvo.id}) não tem arestas no grafo — mudança isolada (ou nós fora do seu nível).`
@@ -929,7 +935,8 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   // gestão (trilha de escalonamento + papéis do domínio) — determinístico, custo zero.
   let trilha = "";
   if (pedeEncaminhamento(input.texto)) {
-    const grafo = grafoFoco ?? carregarGrafo(raiz);
+    // grafo visível: descrição de papel restrito não vaza para rank baixo na trilha
+    const grafo = grafoVisivel(grafoFoco ?? carregarGrafo(raiz), perm, usuario);
     const dominio = focoNo?.dominio ?? focoNo?.id ?? base[0]?.dominio ?? contexto[0]?.dominio;
     if (dominio) trilha = trilhaDeGestao(grafo, dominio);
   }
