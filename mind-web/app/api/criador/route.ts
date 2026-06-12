@@ -2,18 +2,19 @@ import { NextResponse } from "next/server";
 import { carregarPermissoes, rankDe, resolverDadosRaiz } from "@/lib/core";
 import { listarExploracoes, RANK_MINIMO_CRIADOR } from "@/lib/motor-criatividade";
 import { listarPropostas } from "@/lib/freio";
+import { usuarioDaRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Área do Criador (Fase 5) — workspace do nível máximo: explorações criativas
- * abertas e propostas paradas no freio aguardando decisão. A checagem de nível
- * é server-side: o painel só esconde, quem barra é aqui.
+ * abertas e propostas paradas no freio aguardando decisão. A identidade vem da
+ * SESSÃO e a checagem de nível é server-side: o painel só esconde, quem barra é aqui.
  */
 export async function GET(req: Request) {
   const raiz = resolverDadosRaiz();
   const perm = carregarPermissoes(raiz);
-  const id = new URL(req.url).searchParams.get("usuario") ?? "";
+  const id = usuarioDaRequest(req);
   const usuario = perm.usuarios.find((u) => u.id === id);
   if (!usuario || rankDe(perm, usuario.nivel) < RANK_MINIMO_CRIADOR) {
     return NextResponse.json({ erro: "Área do Criador é exclusiva do nível máximo." }, { status: 403 });

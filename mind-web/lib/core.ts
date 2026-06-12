@@ -65,6 +65,8 @@ export interface Usuario {
   nome: string;
   nivel: string;
   tags?: string[];
+  /** Hash scrypt da senha (lib/auth.ts). Usuário sem hash não consegue logar no painel. */
+  senha_hash?: string;
 }
 
 export interface Permissoes {
@@ -254,7 +256,11 @@ export function carregarMemoria(raiz = resolverDadosRaiz()): DocMemoria[] {
 export function carregarPermissoes(raiz = resolverDadosRaiz()): Permissoes {
   const dir = path.join(raiz, "permissoes");
   const niveisRaw = JSON.parse(fs.readFileSync(path.join(dir, "niveis.json"), "utf8"));
-  const usuariosRaw = JSON.parse(fs.readFileSync(path.join(dir, "usuarios.exemplo.json"), "utf8"));
+  // usuarios.json (real, com senha, fora do Git) tem precedência sobre o exemplo
+  const arqReal = path.join(dir, "usuarios.json");
+  const usuariosRaw = JSON.parse(
+    fs.readFileSync(fs.existsSync(arqReal) ? arqReal : path.join(dir, "usuarios.exemplo.json"), "utf8")
+  );
   return {
     niveis: niveisRaw.niveis,
     sensibilidadeParaRankMinimo: niveisRaw.sensibilidade_para_rank_minimo,

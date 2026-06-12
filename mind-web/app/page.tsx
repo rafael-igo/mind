@@ -1,8 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const USUARIOS = ["rafael", "diretor-exemplo", "rh-exemplo", "operador-exemplo"];
-
+interface Sessao { usuario: string; nome: string; nivel: string }
 interface Mensagem { de: "eu" | "mind"; texto: string; meta?: string }
 interface AreaCriador {
   exploracoes: { id: string; problema: string; criadaEm: string; abordagens: number }[];
@@ -16,7 +15,11 @@ interface DetalheNo {
 }
 
 export default function Painel() {
-  const [usuario, setUsuario] = useState("rafael");
+  const [eu, setEu] = useState<Sessao | null>(null);
+  const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [loginUsuario, setLoginUsuario] = useState("");
+  const [loginSenha, setLoginSenha] = useState("");
+  const [loginErro, setLoginErro] = useState("");
   const [texto, setTexto] = useState("");
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [pensando, setPensando] = useState(false);
@@ -28,17 +31,44 @@ export default function Painel() {
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // ---- Área do Criador (Fase 5): o servidor decide quem entra; 403 => painel some
-  const carregarCriador = useCallback(async (u: string) => {
+  // ---- Sessão: quem sou eu? (cookie HTTP-only assinado; sem sessão => tela de login)
+  useEffect(() => {
+    fetch("/api/eu")
+      .then(async (r) => setEu(r.ok ? await r.json() : null))
+      .catch(() => setEu(null))
+      .finally(() => setCarregandoSessao(false));
+  }, []);
+
+  async function entrar() {
+    setLoginErro("");
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ usuario: loginUsuario.trim(), senha: loginSenha }),
+    });
+    if (r.ok) { setEu(await r.json()); setLoginSenha(""); }
+    else setLoginErro((await r.json()).erro ?? "Falha no login.");
+  }
+
+  async function sair() {
+    await fetch("/api/logout", { method: "POST" });
+    setEu(null);
+    setMensagens([]);
+    setCriador(null);
+    setDetalhe(null);
+  }
+
+  // ---- Área do Criador (Fase 5): identidade vem da sessão; o servidor decide (403 => some)
+  const carregarCriador = useCallback(async () => {
     try {
-      const r = await fetch(`/api/criador?usuario=${encodeURIComponent(u)}`);
+      const r = await fetch("/api/criador");
       setCriador(r.ok ? await r.json() : null);
     } catch {
       setCriador(null);
     }
   }, []);
 
-  useEffect(() => { carregarCriador(usuario); }, [usuario, carregarCriador]);
+  useEffect(() => { if (eu) carregarCriador(); }, [eu, carregarCriador]);
 
   // ---- Grafo: busca JSON+Mermaid e renderiza (o diagrama é projeção, regenerada a cada mudança)
   const carregarGrafo = useCallback(async () => {
@@ -52,15 +82,16 @@ export default function Painel() {
     setSvg(svg);
   }, []);
 
-  useEffect(() => { carregarGrafo(); }, [carregarGrafo]);
+  useEffect(() => { if (eu) carregarGrafo(); }, [eu, carregarGrafo]);
 
   // Monitor (Ollama liga sob demanda — o badge mostra quando a máquina está de pé)
   useEffect(() => {
+    if (!eu) return;
     const checar = () => fetch("/api/saude").then((r) => r.json()).then(setSaude).catch(() => setSaude(null));
     checar();
     const t = setInterval(checar, 30_000);
     return () => clearInterval(t);
-  }, []);
+  }, [eu]);
 
   // ---- Clique no nó: o id do nó vem no id do <g class="node"> gerado pelo Mermaid
   useEffect(() => {
@@ -94,7 +125,7 @@ export default function Painel() {
       const r = await fetch("/api/perguntar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ usuario, texto: pergunta }),
+        body: JSON.stringify({ texto: pergunta }), // identidade vem da sessão, não do corpo
       });
       const j = await r.json();
       setMensagens((m) => [...m, {
@@ -105,11 +136,39 @@ export default function Painel() {
       // Se a Mind mudou a verdade (decisão aprovada), o diagrama reorganiza sozinho
       if (j.modo === "freio-decisao" || j.modo === "freio-proposta") await carregarGrafo();
       // Workspace do criador acompanha o ciclo: explorar → promover → decidir
-      if (["criatividade", "freio-proposta", "freio-decisao"].includes(j.modo)) await carregarCriador(usuario);
+      if (["criatividade", "freio-proposta", "freio-decisao"].includes(j.modo)) await carregarCriador();
     } finally {
       setPensando(false);
       setTimeout(() => chatRef.current?.scrollTo({ top: 1e9, behavior: "smooth" }), 50);
     }
+  }
+
+  // ---- Tela de login (sem sessão, nada do cérebro carrega — as APIs também barram)
+  if (carregandoSessao) {
+    return <main style={{ display: "grid", placeItems: "center", height: "100vh", opacity: 0.5 }}>🧠 …</main>;
+  }
+  if (!eu) {
+    return (
+      <main style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+        <form onSubmit={(e) => { e.preventDefault(); entrar(); }}
+          style={{ width: 320, padding: 24, borderRadius: 16, background: "#161c33", border: "1px solid #2c3558",
+            display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 20, textAlign: "center", marginBottom: 6 }}>🧠 <b>Mind</b></div>
+          <input value={loginUsuario} onChange={(e) => setLoginUsuario(e.target.value)} placeholder="usuário" autoFocus
+            style={{ padding: 10, borderRadius: 8, background: "#0b1020", color: "#e6e9f0", border: "1px solid #2c3558" }} />
+          <input value={loginSenha} onChange={(e) => setLoginSenha(e.target.value)} placeholder="senha" type="password"
+            style={{ padding: 10, borderRadius: 8, background: "#0b1020", color: "#e6e9f0", border: "1px solid #2c3558" }} />
+          {loginErro && <div style={{ color: "#f87171", fontSize: 13 }}>{loginErro}</div>}
+          <button type="submit"
+            style={{ padding: 10, borderRadius: 8, border: 0, background: "#6366f1", color: "white", cursor: "pointer" }}>
+            entrar
+          </button>
+          <div style={{ fontSize: 11, opacity: 0.5, textAlign: "center" }}>
+            sem senha? peça ao criador: <code>npm run usuario -- &lt;id&gt; &lt;senha&gt;</code>
+          </div>
+        </form>
+      </main>
+    );
   }
 
   return (
@@ -173,11 +232,14 @@ export default function Painel() {
 
       {/* ---- Chat ---- */}
       <section style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-        <header style={{ padding: 12, borderBottom: "1px solid #232a45" }}>
-          <select value={usuario} onChange={(e) => setUsuario(e.target.value)}
-            style={{ width: "100%", padding: 8, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }}>
-            {USUARIOS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+        <header style={{ padding: 12, borderBottom: "1px solid #232a45", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 14 }}>
+            👤 <b>{eu.nome}</b> <span style={{ opacity: 0.6, fontSize: 12 }}>({eu.nivel})</span>
+          </span>
+          <button onClick={sair}
+            style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid #2c3558", background: "transparent", color: "#e6e9f0", cursor: "pointer" }}>
+            sair
+          </button>
         </header>
 
         {/* ---- Área do Criador (Fase 5): workspace do nível máximo — o servidor barra, aqui só mostra */}

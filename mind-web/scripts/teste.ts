@@ -186,6 +186,18 @@ ok(sensibilidadeDoMeta({ publico: "diretoria, gestao-operacoes" }) === "restrito
   sensibilidadeDoMeta({ sensibilidade: "alta", publico: "todas-areas" }) === "restrito",
   "Permissão — campo `publico:` de base externa vira sensibilidade (resumo de diretoria NÃO fica interno)");
 
+// --- Autenticação: senha (scrypt) e token de sessão (HMAC) ---
+const { hashSenha, verificarSenha, criarToken, verificarToken } = await import("../lib/auth.ts");
+const hSenha = hashSenha("teste-123");
+ok(verificarSenha("teste-123", hSenha) && !verificarSenha("errada", hSenha) && !verificarSenha("teste-123", undefined),
+  "Auth — senha verifica, rejeita errada e rejeita usuário sem senha cadastrada");
+const token = criarToken("rafael", 1);
+const [pl] = token.split(".");
+ok(verificarToken(token) === "rafael" && verificarToken(`${pl}.assinatura-falsa`) === null && verificarToken("lixo") === null,
+  "Auth — token de sessão valida e detecta adulteração");
+ok(verificarToken(criarToken("rafael", -1)) === null,
+  "Auth — token expirado não vale");
+
 // --- Memória vetorial: degradação silenciosa quando Ollama está desligado ---
 const { ollamaDisponivel, buscarVetorial } = await import("../lib/memoria-vetorial.ts");
 ok((await ollamaDisponivel(true)) === false && (await buscarVetorial("pendente aéreo")) === null,

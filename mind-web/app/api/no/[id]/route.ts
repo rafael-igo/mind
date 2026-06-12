@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { carregarGrafo, carregarMemoria } from "@/lib/core";
 import { cascataTransitiva } from "@/lib/motor-cognitivo";
+import { usuarioDaRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
+    if (!usuarioDaRequest(req)) return NextResponse.json({ erro: "não autenticado" }, { status: 401 });
     const g = carregarGrafo();
     const no = g.nos.find((n) => n.id === params.id);
     if (!no) return NextResponse.json({ erro: "nó não encontrado" }, { status: 404 });

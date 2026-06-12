@@ -14,5 +14,9 @@ out/
 # logs
 *.log
 
+# autenticação (senhas reais e segredo de sessão ficam fora do Git)
+permissoes/usuarios.json
+operacao/.segredo-auth
+
 # saídas geradas pelo graphify (regenerável com /graphify)
 graphify-out/

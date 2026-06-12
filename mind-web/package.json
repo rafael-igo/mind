@@ -10,7 +10,8 @@
     "teste": "node --experimental-strip-types scripts/teste.ts",
     "teste:base": "node --experimental-strip-types scripts/teste-base.ts",
     "indexar": "node --env-file=.env --experimental-strip-types scripts/indexar.ts",
-    "teste:vetorial": "node --env-file=.env --experimental-strip-types scripts/teste-vetorial.ts"
+    "teste:vetorial": "node --env-file=.env --experimental-strip-types scripts/teste-vetorial.ts",
+    "usuario": "node --experimental-strip-types scripts/usuario.ts"
   },
   "dependencies": {
     "mermaid": "^11.15.0",
