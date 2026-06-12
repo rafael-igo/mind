@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { carregarMemoria, carregarPermissoes, rankDe, resolverDadosRaiz } from "@/lib/core";
-import { aprovarDoInbox, RANK_MINIMO_CURADORIA } from "@/lib/memoria-editor";
+import { aprovarDoInbox, consolidarParaProfunda, listarInbox, RANK_MINIMO_CURADORIA } from "@/lib/memoria-editor";
 import { indexarMemoria } from "@/lib/memoria-vetorial";
 import { usuarioDaRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-/** Curadoria: aprova um doc do _inbox para recente|profunda (diretor+). */
+/**
+ * Curadoria (diretor+), as duas portas do ciclo do conhecimento:
+ * - doc no _inbox  → aprova para recente (homologação) ou direto para profunda;
+ * - doc na recente → CONSOLIDA para profunda (vira conhecimento).
+ */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const raiz = resolverDadosRaiz();
   const perm = carregarPermissoes(raiz);
@@ -18,9 +22,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const b = await req.json().catch(() => ({}));
     const destino = b?.destino === "profunda" ? "profunda" : "recente";
-    const r = aprovarDoInbox(raiz, params.id, destino);
+    const noInbox = listarInbox(raiz).some((d) => d.id === params.id);
+    const r = noInbox
+      ? aprovarDoInbox(raiz, params.id, destino)
+      : consolidarParaProfunda(raiz, params.id);
     indexarMemoria(carregarMemoria(raiz)).catch(() => {});
-    return NextResponse.json({ ok: true, ...r, destino });
+    return NextResponse.json({ ok: true, ...r, destino: noInbox ? destino : "profunda" });
   } catch (e) {
     return NextResponse.json({ erro: String(e instanceof Error ? e.message : e) }, { status: 400 });
   }

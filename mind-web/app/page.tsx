@@ -45,6 +45,43 @@ export default function Painel() {
   const arquivoRef = useRef<HTMLInputElement>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  // ---- Pan/zoom do grafo: a "lente" recebe um transform; o viewport captura gestos.
+  const vpRef = useRef<HTMLDivElement>(null);
+  const lenteRef = useRef<HTMLDivElement>(null);
+  const vistaRef = useRef({ x: 0, y: 0, k: 1 });
+  const arrastouRef = useRef(false); // suprime o clique-no-nó logo após um arrasto
+
+  const aplicarVista = useCallback(() => {
+    const v = vistaRef.current;
+    if (lenteRef.current) lenteRef.current.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.k})`;
+  }, []);
+
+  /** Zoom mantendo o ponto (cx,cy) do viewport parado na tela. */
+  const zoomNoPonto = useCallback((fator: number, cx: number, cy: number) => {
+    const v = vistaRef.current;
+    const k = Math.min(4, Math.max(0.15, v.k * fator));
+    const f = k / v.k;
+    vistaRef.current = { k, x: cx - (cx - v.x) * f, y: cy - (cy - v.y) * f };
+    aplicarVista();
+  }, [aplicarVista]);
+
+  /** Enquadra o diagrama inteiro no viewport (também é o "reset"). */
+  const ajustarVista = useCallback(() => {
+    const vp = vpRef.current, lente = lenteRef.current;
+    if (!vp || !lente) return;
+    vistaRef.current = { x: 0, y: 0, k: 1 };
+    aplicarVista();
+    const r = lente.getBoundingClientRect(), a = vp.getBoundingClientRect();
+    if (!r.width || !r.height || !a.width || !a.height) return;
+    const k = Math.min(a.width / r.width, a.height / r.height, 1.6) * 0.93;
+    vistaRef.current = { k, x: (a.width - r.width * k) / 2, y: (a.height - r.height * k) / 2 };
+    aplicarVista();
+  }, [aplicarVista]);
+
+  const zoomCentro = useCallback((fator: number) => {
+    const a = vpRef.current?.getBoundingClientRect();
+    if (a) zoomNoPonto(fator, a.width / 2, a.height / 2);
+  }, [zoomNoPonto]);
 
   // ---- Sessão: quem sou eu? (cookie HTTP-only assinado; sem sessão => tela de login)
   useEffect(() => {
@@ -108,12 +145,93 @@ export default function Painel() {
     return () => clearInterval(t);
   }, [eu]);
 
+  // ---- Gestos do grafo: wheel = zoom (pinça de trackpad manda wheel com ctrlKey),
+  // 1 ponteiro = pan, 2 ponteiros = pinça touch. Listeners nativos (preventDefault no wheel).
+  useEffect(() => {
+    if (memAberta) return;
+    const vp = vpRef.current;
+    if (!vp) return;
+    const ponteiros = new Map<number, { x: number; y: number }>();
+    let distAnt = 0;
+    let moveu = false;
+    const pos = (e: PointerEvent) => {
+      const r = vp.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      // pinça do trackpad chega como wheel+ctrlKey com deltas pequenos => sensibilidade maior
+      const fator = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022));
+      zoomNoPonto(fator, e.clientX - r.left, e.clientY - r.top);
+    };
+    const onDown = (e: PointerEvent) => {
+      vp.setPointerCapture(e.pointerId);
+      ponteiros.set(e.pointerId, pos(e));
+      if (ponteiros.size === 2) {
+        const [a, b] = [...ponteiros.values()];
+        distAnt = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+      moveu = false;
+      vp.style.cursor = "grabbing";
+    };
+    const onMove = (e: PointerEvent) => {
+      const ant = ponteiros.get(e.pointerId);
+      if (!ant) return;
+      const p = pos(e);
+      ponteiros.set(e.pointerId, p);
+      if (ponteiros.size === 1) {
+        const dx = p.x - ant.x, dy = p.y - ant.y;
+        if (Math.abs(dx) + Math.abs(dy) > 2) moveu = true;
+        vistaRef.current.x += dx;
+        vistaRef.current.y += dy;
+        aplicarVista();
+      } else if (ponteiros.size === 2) {
+        const [a, b] = [...ponteiros.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (distAnt > 0) zoomNoPonto(dist / distAnt, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        distAnt = dist;
+        moveu = true;
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      ponteiros.delete(e.pointerId);
+      distAnt = 0;
+      vp.style.cursor = "grab";
+      if (moveu) {
+        // o click dispara logo após o pointerup; o timeout 0 libera a flag em seguida
+        arrastouRef.current = true;
+        setTimeout(() => { arrastouRef.current = false; }, 0);
+      }
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    vp.addEventListener("pointerdown", onDown);
+    vp.addEventListener("pointermove", onMove);
+    vp.addEventListener("pointerup", onUp);
+    vp.addEventListener("pointercancel", onUp);
+    return () => {
+      vp.removeEventListener("wheel", onWheel);
+      vp.removeEventListener("pointerdown", onDown);
+      vp.removeEventListener("pointermove", onMove);
+      vp.removeEventListener("pointerup", onUp);
+      vp.removeEventListener("pointercancel", onUp);
+    };
+  }, [memAberta, aplicarVista, zoomNoPonto]);
+
+  // Diagrama novo (ou voltou da memória) => enquadra na tela
+  useEffect(() => {
+    if (!svg || memAberta) return;
+    const raf = requestAnimationFrame(() => ajustarVista());
+    return () => cancelAnimationFrame(raf);
+  }, [svg, memAberta, ajustarVista]);
+
   // ---- Clique no nó: DELEGAÇÃO no container (um listener só) — sobrevive a qualquer
   // re-render do Mermaid; listeners por nó morriam quando o SVG era trocado por baixo.
   useEffect(() => {
     const el = grafoRef.current;
     if (!el) return;
     const fn = (ev: Event) => {
+      if (arrastouRef.current) return; // foi um pan, não um clique
       const g = (ev.target as Element).closest?.("g.node");
       if (!g) return;
       const id = idsNos.find((i) => g.id.includes(`-${i}-`) || g.id.endsWith(`-${i}`) || g.id.includes(`flowchart-${i}`));
@@ -122,7 +240,7 @@ export default function Painel() {
     };
     el.addEventListener("click", fn);
     return () => el.removeEventListener("click", fn);
-  }, [idsNos]);
+  }, [idsNos, memAberta]); // memAberta: o div do grafo remonta ao alternar memória↔grafo
 
   // ---- 📚 Memória: input de dados/arquivos + edição dos RAGs (curadoria humana)
   const carregarMemLista = useCallback(async () => {
@@ -258,7 +376,8 @@ export default function Painel() {
   return (
     <main style={{ display: "grid", gridTemplateColumns: "1fr 400px", height: "100vh" }}>
       {/* ---- Grafo ---- */}
-      <section style={{ position: "relative", overflow: "auto", borderRight: "1px solid #232a45" }}>
+      <section style={{ position: "relative", display: "flex", flexDirection: "column",
+        overflow: memAberta ? "auto" : "hidden", borderRight: "1px solid #232a45" }}>
         <header style={{ padding: "12px 20px", position: "sticky", top: 0, background: "#0b1020ee", zIndex: 2,
           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span><b>🧠 Mind</b> <span style={{ opacity: 0.6, fontSize: 13 }}>— {memAberta ? "memória (curadoria)" : "grafo (JSON é a verdade; clique num nó)"}</span></span>
@@ -315,12 +434,18 @@ export default function Painel() {
 
               {["profunda", "recente"].map((com) => (
                 <div key={com} style={{ marginBottom: 16 }}>
-                  <b style={{ fontSize: 14 }}>{com === "profunda" ? "🧠 profunda (semântica)" : "🕐 recente (episódica)"}</b>
+                  <b style={{ fontSize: 14 }}>{com === "profunda" ? "🧠 profunda (conhecimento)" : "🕐 recente (homologação)"}</b>
                   {memLista?.docs.filter((d) => d.comunidade === com).map((d) => (
-                    <div key={d.id} onClick={() => abrirMemDoc(d.id)}
-                      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13, cursor: "pointer" }}>
-                      <span style={{ flex: 1 }}>📄 {d.titulo}</span>
+                    <div key={d.id} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13 }}>
+                      <span onClick={() => abrirMemDoc(d.id)} style={{ flex: 1, cursor: "pointer" }}>📄 {d.titulo}</span>
                       <span style={{ opacity: 0.5, fontSize: 11 }}>{d.sensibilidade} · {Math.round(d.tamanho / 100) / 10}k</span>
+                      {com === "recente" && d.editavel && memLista?.curador && (
+                        <button onClick={() => aprovarMemDoc(d.id, "profunda")}
+                          title="homologado: consolidar como conhecimento"
+                          style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#0e7490", color: "white", cursor: "pointer" }}>
+                          consolidar → profunda
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -394,8 +519,30 @@ export default function Painel() {
           </div>
         )}
 
-        {!memAberta && <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
-          style={{ padding: 20, minHeight: "70vh", display: "flex", justifyContent: "center" }} />}
+        {!memAberta && (
+          <div ref={vpRef}
+            style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden",
+              touchAction: "none", cursor: "grab", userSelect: "none" }}>
+            <div ref={lenteRef} style={{ transformOrigin: "0 0", width: "fit-content" }}>
+              <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }} />
+            </div>
+            {/* controles de zoom (o scroll/pinça também funciona em cima do grafo) */}
+            <div style={{ position: "absolute", right: 14, bottom: 14, display: "flex",
+              flexDirection: "column", gap: 6, zIndex: 2 }}>
+              {([
+                ["＋", "aproximar", () => zoomCentro(1.3)],
+                ["−", "afastar", () => zoomCentro(1 / 1.3)],
+                ["⤢", "enquadrar o diagrama", ajustarVista],
+              ] as [string, string, () => void][]).map(([rotulo, dica, acao]) => (
+                <button key={rotulo} onClick={acao} title={dica}
+                  style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid #2c3558",
+                    background: "#161c33dd", color: "#e6e9f0", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {detalhe && (
           <aside style={{ position: "absolute", top: 60, left: 20, width: 340, padding: 16, borderRadius: 12,

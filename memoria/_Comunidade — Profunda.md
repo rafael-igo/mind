@@ -9,6 +9,7 @@ gerado_por: mind-ingestor (atualizar_hubs)
 Conhecimento consolidado e curado — a Mind responde a partir daqui com confiança.
 
 - [[cascata-logistica]]
+- [[ciclo-do-conhecimento]]
 - [[papeis-raci-rsvp]]
 - [[papel-operador]]
 - [[pendente-aereo]]

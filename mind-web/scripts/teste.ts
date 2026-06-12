@@ -238,6 +238,30 @@ ok(r29.modo === "registro" && !!idReg && !carregarMemoria(raiz).some((d) => d.id
   if (reg) fs.rmSync(reg.arquivo, { force: true });
 }
 
+// --- Ciclo do conhecimento completo: registrar → _inbox → recente (homologação) → profunda ---
+{
+  const { listarInbox, aprovarDoInbox, consolidarParaProfunda } = await import("../lib/memoria-editor.ts");
+  const rCiclo = await orquestrar({ usuario: "operador-exemplo", texto: "registrar: regra de teste do ciclo completo da Mind" }, raiz);
+  const idCiclo = rCiclo.contexto[0];
+  aprovarDoInbox(raiz, idCiclo, "recente");
+  const emHomologacao = carregarMemoria(raiz).find((d) => d.id === idCiclo);
+  ok(!!emHomologacao && emHomologacao.comunidade === "recente",
+    "Ciclo — aprovado do _inbox entra em HOMOLOGAÇÃO (recente, já buscável)");
+  const cons = consolidarParaProfunda(raiz, idCiclo);
+  const consolidado = carregarMemoria(raiz).find((d) => d.id === idCiclo);
+  ok(!!consolidado && consolidado.comunidade === "profunda" && !listarInbox(raiz).some((d) => d.id === idCiclo),
+    "Ciclo — homologado CONSOLIDA para profunda (vira conhecimento)");
+  let recusouCiclo = "";
+  try { consolidarParaProfunda(raiz, idCiclo); } catch (e) { recusouCiclo = String(e); }
+  ok(recusouCiclo.includes("recente"),
+    "Ciclo — só memória recente consolida (profunda não re-consolida)");
+  fs.rmSync(cons.arquivo, { force: true });
+}
+
+ok(carregarMemoria(raiz).some((d) => d.id === "ciclo-do-conhecimento") &&
+  carregarGrafo(raiz).nos.some((n) => n.id === "motor-consolidacao" && n.status === "planejado"),
+  "Ciclo — mapa de workers/LLMs registrado como conhecimento e no grafo (motor-consolidacao planejado)");
+
 // --- Memória editável: input de dados/arquivos + edição dos RAGs (curadoria humana) ---
 const me = await import("../lib/memoria-editor.ts");
 const novoDoc = me.criarDoc(raiz, { titulo: "Teste de Curadoria Mind", corpo: "Conteúdo de teste.", comunidade: "_inbox", sensibilidade: "interno", tags: ["teste"] });

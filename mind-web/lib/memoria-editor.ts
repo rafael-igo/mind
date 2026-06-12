@@ -179,6 +179,28 @@ export function aprovarDoInbox(raiz: string, id: string, destino: "recente" | "p
   return { id: doc.id, arquivo };
 }
 
+/**
+ * Consolidação: memória RECENTE (homologação) vira PROFUNDA (conhecimento).
+ * É a etapa final do ciclo: registrar → _inbox → recente → profunda.
+ */
+export function consolidarParaProfunda(raiz: string, id: string): { id: string; arquivo: string } {
+  const doc = carregarMemoria(raiz).find((d) => d.id === id);
+  if (!doc) throw new Error(`doc não encontrado: ${id}`);
+  if (!ehDaMind(doc.arquivo, raiz)) throw new Error(`doc de base externa é somente leitura: ${id}`);
+  if (doc.comunidade !== "recente") throw new Error(`só memória recente consolida para profunda (este está em '${doc.comunidade}')`);
+  const dir = path.join(dirMemoria(raiz), "profunda");
+  fs.mkdirSync(dir, { recursive: true });
+  const { meta, corpo } = parseFrontmatter(fs.readFileSync(doc.arquivo, "utf8"));
+  meta.id = doc.id;
+  meta.comunidade = "profunda";
+  meta.consolidado_em = new Date().toISOString().slice(0, 10);
+  const head = Object.entries(meta).map(([k, v]) => `${k}: ${v}`).join("\n");
+  const arquivo = path.join(dir, path.basename(doc.arquivo));
+  fs.writeFileSync(arquivo, `---\n${head}\n---\n\n${corpo}\n`);
+  fs.rmSync(doc.arquivo);
+  return { id: doc.id, arquivo };
+}
+
 /** "Apagar" = mover para memoria/_lixeira/ (invisível à busca; nada se perde). */
 export function mandarParaLixeira(raiz: string, id: string): string {
   const doc = acharDoc(raiz, id);

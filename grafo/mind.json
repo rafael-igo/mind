@@ -1,7 +1,7 @@
 {
-  "versao": "0.3.0",
+  "versao": "0.4.0",
   "dominio": "mind-plataforma",
-  "atualizado_em": "2026-06-11",
+  "atualizado_em": "2026-06-12",
   "nos": [
     {
       "id": "mind-plataforma",
@@ -80,6 +80,30 @@
       "memoria": []
     },
     {
+      "id": "ciclo-do-conhecimento",
+      "tipo": "bloco-regra",
+      "titulo": "Ciclo do Conhecimento",
+      "descricao": "sugestão → _inbox (pré-memória) → recente (homologação) → profunda (conhecimento). Cada seta é aprovação de diretor+. Workers e LLMs mapeados por etapa no doc ligado.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "ativo",
+      "memoria": [
+        "ciclo-do-conhecimento"
+      ]
+    },
+    {
+      "id": "motor-consolidacao",
+      "tipo": "motor",
+      "titulo": "Motor de Consolidação (o sono)",
+      "descricao": "Worker periódico que vai propor consolidações recente → profunda (fusões/resumos com modelo forte), sempre como proposta no freio. Hoje a consolidação é manual no painel 📚.",
+      "dominio": "mind-plataforma",
+      "sensibilidade": "interno",
+      "status": "planejado",
+      "memoria": [
+        "ciclo-do-conhecimento"
+      ]
+    },
+    {
       "id": "mind-ingestor",
       "tipo": "modulo",
       "titulo": "Motor de Memória (mind-ingestor)",
@@ -137,6 +161,34 @@
       "de": "mind-plataforma",
       "para": "area-do-criador",
       "tipo": "contem"
+    },
+    {
+      "de": "mind-plataforma",
+      "para": "ciclo-do-conhecimento",
+      "tipo": "contem"
+    },
+    {
+      "de": "mind-plataforma",
+      "para": "motor-consolidacao",
+      "tipo": "contem"
+    },
+    {
+      "de": "orquestrador-mind",
+      "para": "ciclo-do-conhecimento",
+      "tipo": "depende-de",
+      "label": "registrar: → _inbox"
+    },
+    {
+      "de": "mind-ingestor",
+      "para": "ciclo-do-conhecimento",
+      "tipo": "depende-de",
+      "label": "captura → recente"
+    },
+    {
+      "de": "motor-consolidacao",
+      "para": "ciclo-do-conhecimento",
+      "tipo": "aciona",
+      "label": "recente → profunda (via freio)"
     },
     {
       "de": "orquestrador-mind",
