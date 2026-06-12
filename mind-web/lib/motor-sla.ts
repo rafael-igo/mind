@@ -60,11 +60,17 @@ export function calcularSla(pendencias: Pendencia[], agora = new Date()): Result
     .sort((a, b) => Number(b.estourado) - Number(a.estourado) || ordem[a.prioridade] - ordem[b.prioridade] || a.restanteMin - b.restanteMin);
 }
 
-/** Resumo legível do resultado — a resposta determinística da Mind (sem LLM). */
-export function resumirSla(resultados: ResultadoSla[], agora = new Date()): string {
+/**
+ * Resumo legível do resultado — a resposta determinística da Mind (sem LLM).
+ * `limite` protege o consumo: com dados reais (centenas de pendências), só os piores
+ * casos viram texto (calcularSla já ordena estourados/críticos primeiro) — o resto
+ * vira contagem. Nada de despejar a operação inteira no contexto da LLM.
+ */
+export function resumirSla(resultados: ResultadoSla[], agora = new Date(), limite = 15): string {
   if (resultados.length === 0) return "Nenhuma pendência registrada — nada estourando o SLA.";
   const estourados = resultados.filter((r) => r.estourado);
-  const linhas = resultados.map((r) => {
+  const mostrar = resultados.slice(0, limite);
+  const linhas = mostrar.map((r) => {
     const status = r.estourado ? `🔴 ESTOURADO há ${Math.abs(r.restanteMin)} min` : `🟢 restam ${r.restanteMin} min`;
     return `- ${r.convidado} (${r.tipo}): prioridade ${r.prioridade}, prazo ${r.prazoHoras}h — ${status}`;
   });
@@ -72,5 +78,8 @@ export function resumirSla(resultados: ResultadoSla[], agora = new Date()): stri
     estourados.length === 0
       ? `Nenhum convidado estourando o SLA (${resultados.length} pendência(s) no prazo).`
       : `${estourados.length} de ${resultados.length} pendência(s) ESTOURANDO o SLA:`;
-  return `${cab}\n${linhas.join("\n")}\n(cálculo determinístico do Motor de SLA em ${agora.toISOString()})`;
+  const rodape = resultados.length > mostrar.length
+    ? `\n… e mais ${resultados.length - mostrar.length} pendência(s) (mostro os ${mostrar.length} piores casos).`
+    : "";
+  return `${cab}\n${linhas.join("\n")}${rodape}\n(cálculo determinístico do Motor de SLA em ${agora.toISOString()})`;
 }

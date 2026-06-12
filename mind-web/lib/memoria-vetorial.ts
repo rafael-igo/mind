@@ -101,6 +101,14 @@ export async function indexarMemoria(docs: DocMemoria[]): Promise<ResultadoIndex
   const db = await pool();
   if (!db || !(await ollamaDisponivel())) return null;
 
+  // Poda de órfãos: doc apagado/lixeira não pode continuar ocupando vaga no topK da busca.
+  if (docs.length) {
+    await db.query(
+      "DELETE FROM memoria_vetores WHERE NOT (doc_id = ANY($1::text[]))",
+      [docs.map((d) => d.id)]
+    );
+  }
+
   let indexados = 0, pulados = 0, chunks = 0;
   for (const doc of docs) {
     const hash = createHash("sha256").update(EMB_VERSAO + doc.corpo).digest("hex");

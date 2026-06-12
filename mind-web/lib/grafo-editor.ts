@@ -60,9 +60,28 @@ export function parseOperacaoGrafo(texto: string, grafo: Grafo): OperacaoGrafo |
   return null;
 }
 
-/** Aplica a operação no arquivo de domínio do grafo, validando ANTES de gravar. */
+/** Acha o arquivo do grafo cujo `dominio` casa com o alvo da operação (fallback: atendimento). */
+function arquivoDoDominio(raiz: string, dominioAlvo: string | null | undefined): string {
+  const dir = path.join(raiz, "grafo");
+  if (dominioAlvo) {
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json"))) {
+      try {
+        const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+        if (j.dominio === dominioAlvo || (Array.isArray(j.nos) && j.nos.some((n: No) => n.id === dominioAlvo))) {
+          return path.join(dir, f);
+        }
+      } catch { /* arquivo não-grafo: ignora */ }
+    }
+  }
+  return path.join(dir, "atendimento.json");
+}
+
+/** Aplica a operação no arquivo do DOMÍNIO certo do grafo, validando ANTES de gravar. */
 export function aplicarOperacaoGrafo(raiz: string, op: OperacaoGrafo): void {
-  const arquivo = path.join(raiz, "grafo", "atendimento.json");
+  const dominioAlvo = op.op === "adicionar-no" ? (op.no.dominio ?? op.no.id) : op.aresta.de;
+  const arquivo = op.op === "adicionar-aresta"
+    ? arquivoDoDominio(raiz, carregarGrafo(raiz).nos.find((n) => n.id === op.aresta.de)?.dominio ?? op.aresta.de)
+    : arquivoDoDominio(raiz, dominioAlvo);
   const dados = JSON.parse(fs.readFileSync(arquivo, "utf8"));
 
   if (op.op === "adicionar-no") {

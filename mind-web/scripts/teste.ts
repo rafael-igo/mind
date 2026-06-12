@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { carregarGrafo, carregarMemoria, carregarPermissoes, grafoVisivel, orquestrar, resolverDadosRaiz, sensibilidadeDoMeta } from "../lib/core.ts";
-import { calcularSla } from "../lib/motor-sla.ts";
+import { calcularSla, resumirSla } from "../lib/motor-sla.ts";
 import { gerarMermaid } from "../lib/projecao.ts";
 import { parseOperacaoGrafo } from "../lib/grafo-editor.ts";
 
@@ -293,6 +293,30 @@ ok(!carregarMemoria(raiz).some((d) => d.id === novoDoc.id) && fs.readdirSync(pat
 fs.rmSync(up.arquivo, { force: true });
 for (const f of fs.readdirSync(path.join(raiz, "memoria", "_lixeira")).filter((f) => f.includes(novoDoc.id)))
   fs.rmSync(path.join(raiz, "memoria", "_lixeira", f), { force: true });
+
+// --- Revisão dos motores (12/jun): limites de consumo e gravação por domínio ---
+{
+  const muitos = Array.from({ length: 20 }, (_, i) => ({
+    convidado: `Pessoa ${i + 1}`, tipo: "pendente-aereo", abertaEm: h(-30), eventoEm: h(24),
+  }));
+  const resumoCap = resumirSla(calcularSla(muitos));
+  ok(resumoCap.includes("e mais 5") && resumoCap.split("\n").filter((l) => l.startsWith("- ")).length === 15,
+    "Motores — resumo do SLA limita o consumo: 15 piores casos em texto + contagem do resto");
+
+  const r33 = await orquestrar({ usuario: "rafael", texto: 'adicionar nó modulo "Totem de Impressao" em credenciamento' }, raiz);
+  const idProp4 = r33.contexto[0];
+  await orquestrar({ usuario: "rafael", texto: `aprovar proposta ${idProp4}` }, raiz);
+  const credJson = JSON.parse(fs.readFileSync(path.join(raiz, "grafo", "credenciamento.json"), "utf8"));
+  const atendJson = JSON.parse(fs.readFileSync(path.join(raiz, "grafo", "atendimento.json"), "utf8"));
+  ok(credJson.nos.some((n: any) => n.id === "totem-de-impressao") && !atendJson.nos.some((n: any) => n.id === "totem-de-impressao"),
+    "Motores — operação de grafo grava no ARQUIVO do domínio certo (credenciamento.json, não atendimento)");
+  // limpeza: desfaz o nó de teste e os artefatos do freio
+  credJson.nos = credJson.nos.filter((n: any) => n.id !== "totem-de-impressao");
+  credJson.arestas = credJson.arestas.filter((a: any) => a.de !== "totem-de-impressao" && a.para !== "totem-de-impressao");
+  fs.writeFileSync(path.join(raiz, "grafo", "credenciamento.json"), JSON.stringify(credJson, null, 2) + "\n");
+  fs.rmSync(path.join(raiz, "operacao", "propostas", `${idProp4}.json`), { force: true });
+  fs.rmSync(path.join(raiz, "memoria", "recente", `decisao-${idProp4}.md`), { force: true });
+}
 
 // --- Governança do grafo: cada nível vê o SEU grafo (auditoria 12/jun) ---
 {

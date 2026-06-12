@@ -949,12 +949,16 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     if (pendencias.length) estadoSla = resumirSla(calcularSla(pendencias));
   }
 
+  // Consumo controlado: teto de caracteres por doc no prompt (docs grandes, como os de
+  // estratégia, entram resumidos pelo corte — quem precisa do doc inteiro abre no 📚).
+  const TETO_DOC = 3000;
+  const corta = (s: string) => (s.length > TETO_DOC ? `${s.slice(0, TETO_DOC)}\n[… doc cortado em ${TETO_DOC} caracteres]` : s);
   const ficha = focoNo && grafoFoco ? fichaDoNo(grafoFoco, focoNo) : "";
   const blocoContexto =
     (ficha ? `### Nó em foco (grafo — fonte da verdade)\n${ficha}\n\n` : "") +
     (trilha ? `### Conhecimento de gestão (grafo)\n${trilha}\n\n` : "") +
     (estadoSla ? `### Estado atual da operação (Motor de SLA — determinístico, agora)\n${estadoSla}\n\n` : "") +
-    [...base, ...docsRelacionados].map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`).join("\n\n");
+    [...base, ...docsRelacionados].map((d) => `### ${d.titulo} (${d.id})\n${corta(d.corpo)}`).join("\n\n");
   const idsContexto = [
     ...(focoNo ? [focoNo.id] : []),
     ...docsFoco.map((d) => d.id),

@@ -1,7 +1,7 @@
 {
   "versao": "0.1.0",
   "dominio": "credenciamento",
-  "atualizado_em": "2026-06-11",
+  "atualizado_em": "2026-06-12",
   "comentario": "Fase 6 — primeiro domínio de expansão. Nós ancorados APENAS na memória registrada (processo-de-check-in-nfc); o que não tem registro entra como 'planejado' via freio, nunca direto.",
   "nos": [
     {

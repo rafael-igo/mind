@@ -18,5 +18,8 @@ out/
 permissoes/usuarios.json
 operacao/.segredo-auth
 
+# material de teste gerado (npm run pendencias:teste) / dados reais da operação
+operacao/pendencias.json
+
 # saídas geradas pelo graphify (regenerável com /graphify)
 graphify-out/
