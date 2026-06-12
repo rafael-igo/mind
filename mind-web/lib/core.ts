@@ -484,6 +484,12 @@ function pedeCascata(texto: string): boolean {
   return /(o que (afeta|quebra|impacta)|qual o impacto|se eu mexer|cascata d[eoa]\s)/.test(normalizar(texto));
 }
 
+/** Comando do painel (card do nó → chat): "explica o nó <id>" | "debater o nó <id>". */
+function parseComandoNo(texto: string): { id: string } | null {
+  const m = normalizar(texto).match(/\b(?:explicar?|debater?|sobre)\s+o\s+no\s+([a-z0-9-]+)/);
+  return m ? { id: m[1] } : null;
+}
+
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
@@ -606,6 +612,56 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: [exploracao.id], modo: "criatividade", resposta,
     };
+  }
+
+  // Painel → chat: o card do nó vira debate. Monta o contexto DETERMINÍSTICO do nó
+  // (ficha + ligações + memória ligada, com podeVer) e entrega ao LLM para discutir.
+  const cmdNo = parseComandoNo(input.texto);
+  if (cmdNo) {
+    const grafo = carregarGrafo(raiz);
+    const no = grafo.nos.find((n) => n.id === cmdNo.id);
+    if (no) {
+      if (rank < (perm.sensibilidadeParaRankMinimo[no.sensibilidade] ?? 0)) {
+        return {
+          usuario: usuario.id, nivel: usuario.nivel, rank, permitido: false,
+          contexto: [no.id], modo: "negado",
+          resposta: "Esse nó existe, mas seu nível de acesso não permite consultá-lo.",
+        };
+      }
+      const arestas = grafo.arestas.filter((a) => a.de === no.id || a.para === no.id);
+      const ligacoes = arestas.map((a) => {
+        const outroId = a.de === no.id ? a.para : a.de;
+        const outro = grafo.nos.find((n) => n.id === outroId);
+        return `- ${a.de === no.id ? "→" : "←"} ${outro?.titulo ?? outroId} (${a.tipo}${a.label ? `: ${a.label}` : ""})`;
+      });
+      const docs = memoria.filter((d) => (no.memoria ?? []).includes(d.id) && podeVer(perm, usuario, d.sensibilidade, d.tags));
+      const ficha =
+        `Nó "${no.titulo}" (${no.id}) — tipo ${no.tipo} · status ${no.status} · domínio ${no.dominio ?? no.id} · sensibilidade ${no.sensibilidade}` +
+        (no.descricao ? `\n${no.descricao}` : "") +
+        (ligacoes.length ? `\nLigações:\n${ligacoes.join("\n")}` : "\nSem ligações no grafo.");
+      const blocoDocs = docs.map((d) => `### ${d.titulo} (${d.id})\n${d.corpo.slice(0, 1200)}`).join("\n\n");
+      const viaGateway = await chamarGateway(
+        SYSTEM_PROMPT,
+        `${usuario.id} (nível ${usuario.nivel}) abriu este nó no painel e quer debatê-lo: "${input.texto}".\n` +
+          `A Mind já verificou as permissões. Explique o nó com base na ficha e na memória ligada, ` +
+          `aponte riscos ou lacunas que você enxerga NO REGISTRO (não invente fatos novos) e termine ` +
+          `com 2 perguntas que ajudem a aprofundar o debate.\n\nFicha do nó (grafo — fonte da verdade):\n${ficha}\n\n` +
+          `Memória ligada:\n${blocoDocs || "(nenhuma)"}`,
+        modeloParaNivel(usuario.nivel)
+      );
+      const resposta = viaGateway ??
+        `[offline] ${ficha}` +
+        (docs.length ? `\nMemória ligada: ${docs.map((d) => d.titulo).join("; ")}` : "\nSem memória ligada a este nó.");
+      if (viaGateway) {
+        const sensNo = Math.max(SENS.indexOf(no.sensibilidade), SENS.indexOf(maxSensibilidade(docs)));
+        capturarNoIngestor(usuario.id, input.texto, viaGateway, [no.id, ...docs.map((d) => d.id)], SENS[sensNo] as Sensibilidade);
+      }
+      return {
+        usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+        contexto: [no.id, ...docs.map((d) => d.id)], modo: viaGateway ? "gateway" : "offline", resposta,
+      };
+    }
+    // nó inexistente: segue o fluxo normal (busca na memória)
   }
 
   // Fase 6 — view cruzada de cascata: análise de impacto transitiva, atravessando domínios.

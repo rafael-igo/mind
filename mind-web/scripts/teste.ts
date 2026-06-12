@@ -186,6 +186,19 @@ ok(sensibilidadeDoMeta({ publico: "diretoria, gestao-operacoes" }) === "restrito
   sensibilidadeDoMeta({ sensibilidade: "alta", publico: "todas-areas" }) === "restrito",
   "Permissão — campo `publico:` de base externa vira sensibilidade (resumo de diretoria NÃO fica interno)");
 
+// --- Painel → chat: debater um nó do grafo ("explica o nó <id>") ---
+const r20 = await orquestrar({ usuario: "operador-exemplo", texto: "explica o nó motor-sla" }, raiz);
+ok(r20.permitido && r20.contexto[0] === "motor-sla" && r20.resposta.includes("Motor de SLA") && r20.resposta.includes("Ligações"),
+  "Card→chat — 'explica o nó <id>' responde com a ficha do nó e suas ligações");
+
+const r21 = await orquestrar({ usuario: "operador-exemplo", texto: "explica o nó papel-coordenador" }, raiz);
+ok(!r21.permitido && r21.modo === "negado",
+  "Card→chat — nó restrito NEGado para operador (sensibilidade do nó vale no debate)");
+
+const r22 = await orquestrar({ usuario: "rafael", texto: "debater o nó check-in-nfc" }, raiz);
+ok(r22.permitido && r22.contexto.includes("check-in-nfc") && r22.contexto.includes("processo-de-check-in-nfc"),
+  "Card→chat — memória ligada ao nó entra no contexto do debate");
+
 // --- Autenticação: senha (scrypt) e token de sessão (HMAC) ---
 const { hashSenha, verificarSenha, criarToken, verificarToken } = await import("../lib/auth.ts");
 const hSenha = hashSenha("teste-123");

@@ -198,6 +198,11 @@ export default function Painel() {
               {detalhe.no.tipo} · {detalhe.no.sensibilidade} · {detalhe.no.status} · <code>{detalhe.no.id}</code>
             </div>
             {detalhe.no.descricao && <p style={{ fontSize: 13, marginTop: 8 }}>{detalhe.no.descricao}</p>}
+            <button onClick={() => enviar(`explica o nó ${detalhe.no.id}`)} disabled={pensando}
+              style={{ width: "100%", marginTop: 8, padding: "8px 12px", borderRadius: 8, border: 0,
+                background: "#6366f1", color: "white", cursor: "pointer", fontSize: 13 }}>
+              💬 debater no chat
+            </button>
             <div style={{ fontSize: 12, marginTop: 8 }}>
               <b>Ligações</b>
               {detalhe.arestas.map((a, i) => (
