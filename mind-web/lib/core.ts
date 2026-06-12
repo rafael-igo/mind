@@ -52,6 +52,10 @@ export interface DocMemoria {
   tags: string[];
   corpo: string;
   arquivo: string;
+  /** Domínio do grafo a que o doc pertence (frontmatter `dominio:`). */
+  dominio?: string;
+  /** Referências a outros docs: frontmatter `relacionados:` + [[wikilinks]] no corpo. */
+  relacionados: string[];
 }
 
 export interface Nivel {
@@ -81,7 +85,7 @@ export interface RespostaOrquestrador {
   rank: number;
   permitido: boolean;
   contexto: string[];
-  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao" | "criatividade" | "cascata";
+  modo: "gateway" | "offline" | "negado" | "sem-memoria" | "motor-sla" | "freio-proposta" | "freio-decisao" | "criatividade" | "cascata" | "registro";
   resposta: string;
 }
 
@@ -235,6 +239,11 @@ export function carregarMemoria(raiz = resolverDadosRaiz()): DocMemoria[] {
         const id = meta.id || f.replace(/\.md$/, "");
         if (vistos.has(id)) continue; // a memória própria da Mind tem precedência
         vistos.add(id);
+        // Referências: frontmatter `relacionados:` + [[wikilinks]] no corpo — a Mind segue
+        // essas trilhas ao montar contexto (1 salto), como um gerente que puxa o doc citado.
+        const links = new Set(parseLista(meta.relacionados));
+        for (const m of corpo.matchAll(/\[\[([^\]|#]+)/g)) links.add(m[1].trim());
+        links.delete(id);
         docs.push({
           id,
           titulo: meta.titulo || f,
@@ -244,6 +253,8 @@ export function carregarMemoria(raiz = resolverDadosRaiz()): DocMemoria[] {
           tags: parseLista(meta.tags),
           corpo,
           arquivo: path.join(com.dir, f),
+          dominio: meta.dominio || undefined,
+          relacionados: [...links],
         });
       }
     }
@@ -492,6 +503,42 @@ function parseComandoNo(texto: string): { id: string } | null {
   return m ? { id: m[1] } : null;
 }
 
+/**
+ * Roteamento (gerente): a pergunta pede ENCAMINHAMENTO/decisão de gestão?
+ * ("qual o próximo passo", "o que faremos", "quem cuida/resolve", "como proceder")
+ */
+function pedeEncaminhamento(texto: string): boolean {
+  return /(proximo passo|o que fa(zer|remos|co)|quem (cuida|resolve|assume)|como proceder|encaminh|escalon)/.test(normalizar(texto));
+}
+
+/** Comando do chat: "registrar: <regra>" — a lacuna de conhecimento vira pré-memória (_inbox). */
+function parseComandoRegistrar(texto: string): string | null {
+  const m = texto.match(/^\s*registrar\s*:\s*([\s\S]+)/i);
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * Conhecimento de GESTÃO do grafo: trilha de escalonamento + papéis de um domínio.
+ * É o que um gerente sênior sabe de cabeça — entra no contexto quando a pergunta
+ * pede encaminhamento e não há regra registrada que responda sozinha.
+ */
+function trilhaDeGestao(grafo: Grafo, dominio: string): string {
+  const nosDom = grafo.nos.filter((n) => n.dominio === dominio || n.id === dominio);
+  const ids = new Set(nosDom.map((n) => n.id));
+  const porId = new Map(grafo.nos.map((n) => [n.id, n]));
+  const escadas = grafo.arestas
+    .filter((a) => a.tipo === "escala-para" && (ids.has(a.de) || ids.has(a.para)))
+    .map((a) => `- ${porId.get(a.de)?.titulo ?? a.de} → escala para → ${porId.get(a.para)?.titulo ?? a.para}${a.label ? ` (quando: ${a.label})` : ""}`);
+  if (!escadas.length) return "";
+  const papeis = nosDom
+    .filter((n) => n.tipo === "papel" && n.descricao)
+    .map((n) => `- ${n.titulo}: ${n.descricao}`);
+  return (
+    `Trilha de escalonamento (grafo — domínio ${dominio}):\n${escadas.join("\n")}` +
+    (papeis.length ? `\nPapéis do domínio:\n${papeis.join("\n")}` : "")
+  );
+}
+
 /** Ficha determinística de um nó: o contexto que vai junto quando o nó está em foco/debate. */
 function fichaDoNo(grafo: Grafo, no: No): string {
   const ligacoes = grafo.arestas
@@ -511,8 +558,12 @@ function fichaDoNo(grafo: Grafo, no: No): string {
 // --------------------------- Orquestrador ---------------------------
 
 const SYSTEM_PROMPT =
-  "Você é a Mind, o cérebro digital da empresa. Responda com base APENAS no contexto fornecido " +
-  "(memória curada). Se o contexto não responder, diga que não há registro. Seja direto e em PT-BR.";
+  "Você é a Mind, o cérebro digital da empresa — pense como um GERENTE SÊNIOR de operações, não como um chat. " +
+  "Responda com base no contexto fornecido (memória curada + grafo da empresa). Separe SEMPRE o que é REGISTRO " +
+  "(está no contexto) do que é RECOMENDAÇÃO DE GESTÃO sua. Quando não houver regra registrada para a situação, " +
+  "NÃO pare no 'não há registro': monte o melhor próximo passo CONCRETO cruzando papéis, trilha de escalonamento, " +
+  "SLAs e cascata presentes no contexto — e feche oferecendo oficializar: 'para registrar essa regra, diga: " +
+  "registrar: <texto da regra>'. Nunca invente fatos; recomendações são claramente rotuladas. Direto e em PT-BR.";
 
 export interface PerguntaInput {
   usuario: string;
@@ -560,6 +611,29 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     return {
       usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
       contexto: [p.id], modo: "freio-decisao", resposta,
+    };
+  }
+
+  // Lacuna vira conhecimento: "registrar: <regra>" cria pré-memória no _inbox.
+  // Qualquer um contribui; a curadoria (diretor+) decide se vira verdade.
+  const textoRegistrar = parseComandoRegistrar(input.texto);
+  if (textoRegistrar) {
+    const { criarDoc } = await import("./memoria-editor.ts");
+    const r = criarDoc(raiz, {
+      titulo: textoRegistrar.split("\n")[0].slice(0, 70),
+      corpo: textoRegistrar + `\n\n> Registrado pelo chat por ${usuario.id} (${usuario.nivel}).`,
+      comunidade: "_inbox",
+      sensibilidade: "interno",
+      tags: ["regra-proposta", "chat"],
+      tipo: "regra-proposta",
+      fonte: `chat: ${usuario.id}`,
+    });
+    return {
+      usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
+      contexto: [r.id], modo: "registro",
+      resposta:
+        `📥 Registrado como pré-memória (${r.id}) no _inbox — invisível à busca até a curadoria. ` +
+        `Um diretor+ aprova em 📚 memória (→ recente ou → profunda) e aí vira verdade da Mind.`,
     };
   }
 
@@ -813,11 +887,44 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
         !contexto.some((c) => c.id === d.id) &&
         podeVer(perm, usuario, d.sensibilidade, d.tags))
     : [];
+
+  // Pensamento de gerente (1): seguir as REFERÊNCIAS dos docs do contexto (frontmatter
+  // `relacionados:` + [[wikilinks]]) — 1 salto, com permissão. Um gerente puxa o doc citado;
+  // a Mind não responde "consulte o sla-rsvp" tendo o sla-rsvp na estante.
+  const base = [...docsFoco, ...contexto];
+  const jaIncluido = new Set(base.map((d) => d.id));
+  const docsRelacionados: DocMemoria[] = [];
+  for (const d of base) {
+    for (const refId of d.relacionados) {
+      if (jaIncluido.has(refId) || docsRelacionados.length >= 3) continue;
+      const ref = memoria.find((x) => x.id === refId);
+      if (ref && podeVer(perm, usuario, ref.sensibilidade, ref.tags)) {
+        jaIncluido.add(ref.id);
+        docsRelacionados.push(ref);
+      }
+    }
+  }
+
+  // Pensamento de gerente (2): pergunta de ENCAMINHAMENTO traz o que o grafo sabe de
+  // gestão (trilha de escalonamento + papéis do domínio) — determinístico, custo zero.
+  let trilha = "";
+  if (pedeEncaminhamento(input.texto)) {
+    const grafo = grafoFoco ?? carregarGrafo(raiz);
+    const dominio = focoNo?.dominio ?? focoNo?.id ?? base[0]?.dominio ?? contexto[0]?.dominio;
+    if (dominio) trilha = trilhaDeGestao(grafo, dominio);
+  }
+
   const ficha = focoNo && grafoFoco ? fichaDoNo(grafoFoco, focoNo) : "";
   const blocoContexto =
     (ficha ? `### Nó em foco (grafo — fonte da verdade)\n${ficha}\n\n` : "") +
-    [...docsFoco, ...contexto].map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`).join("\n\n");
-  const idsContexto = [...(focoNo ? [focoNo.id] : []), ...docsFoco.map((d) => d.id), ...contexto.map((d) => d.id)];
+    (trilha ? `### Conhecimento de gestão (grafo)\n${trilha}\n\n` : "") +
+    [...base, ...docsRelacionados].map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`).join("\n\n");
+  const idsContexto = [
+    ...(focoNo ? [focoNo.id] : []),
+    ...docsFoco.map((d) => d.id),
+    ...contexto.map((d) => d.id),
+    ...docsRelacionados.map((d) => d.id),
+  ];
 
   // Fala: tenta o gateway; se não houver, modo offline (prova recuperação + permissão)
   // O controle de acesso é determinístico e já aconteceu acima — o LLM não deve recusar por confidencialidade.
@@ -843,9 +950,12 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   }
 
   const melhorDoc = contexto[0] ?? docsFoco[0];
-  const resposta = melhorDoc
-    ? `[offline] Encontrei na memória: "${melhorDoc.titulo}". ${melhorDoc.corpo.split("\n").find((l) => l.trim().length > 0) ?? ""}`
-    : `[offline] ${ficha}`;
+  const resposta =
+    (melhorDoc
+      ? `[offline] Encontrei na memória: "${melhorDoc.titulo}". ${melhorDoc.corpo.split("\n").find((l) => l.trim().length > 0) ?? ""}`
+      : `[offline] ${ficha}`) +
+    (docsRelacionados.length ? `\nRelacionados puxados: ${docsRelacionados.map((d) => d.id).join(", ")}` : "") +
+    (trilha ? `\n${trilha}` : "");
   return {
     usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
     contexto: idsContexto, modo: "offline", resposta,

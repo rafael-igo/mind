@@ -77,6 +77,8 @@ export function listarInbox(raiz = resolverDadosRaiz()): DocMemoria[] {
         tags: (meta.tags ?? "").replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean),
         corpo,
         arquivo: path.join(dir, f),
+        dominio: meta.dominio || undefined,
+        relacionados: [],
       };
     });
 }

@@ -217,6 +217,27 @@ const r26 = await orquestrar({ usuario: "operador-exemplo", texto: "me explica i
 ok(!r26.permitido && r26.modo === "negado",
   "Foco — nó restrito em foco NEGado para operador (foco não fura permissão)");
 
+// --- Pensamento de gerente: referências, trilha de escalonamento e registro de lacuna ---
+const r27 = await orquestrar({ usuario: "operador-exemplo", texto: "o que é pendente aéreo?" }, raiz);
+ok(r27.contexto.includes("pendente-aereo") && r27.contexto.includes("sla-rsvp"),
+  "Gerente — a Mind SEGUE as referências do doc ([[relacionados]]): sla-rsvp entra no contexto");
+
+const r28 = await orquestrar({ usuario: "operador-exemplo", texto: "convidado está há 5 dias pendente, qual o próximo passo?" }, raiz);
+ok(r28.resposta.includes("escala para") && r28.resposta.includes("Consultor"),
+  "Gerente — pergunta de encaminhamento traz a trilha de escalonamento do grafo");
+
+const r29 = await orquestrar({ usuario: "operador-exemplo", texto: "registrar: convidado com mais de 5 dias pendente escala para o coordenador com prioridade crítica" }, raiz);
+const idReg = r29.contexto[0];
+ok(r29.modo === "registro" && !!idReg && !carregarMemoria(raiz).some((d) => d.id === idReg),
+  "Gerente — 'registrar:' cria pré-memória no _inbox (lacuna vira candidata a conhecimento)");
+{
+  const { listarInbox } = await import("../lib/memoria-editor.ts");
+  const reg = listarInbox(raiz).find((d) => d.id === idReg);
+  ok(!!reg && reg.corpo.includes("5 dias") && reg.tags.includes("regra-proposta"),
+    "Gerente — o registro guarda a regra proposta e quem registrou");
+  if (reg) fs.rmSync(reg.arquivo, { force: true });
+}
+
 // --- Memória editável: input de dados/arquivos + edição dos RAGs (curadoria humana) ---
 const me = await import("../lib/memoria-editor.ts");
 const novoDoc = me.criarDoc(raiz, { titulo: "Teste de Curadoria Mind", corpo: "Conteúdo de teste.", comunidade: "_inbox", sensibilidade: "interno", tags: ["teste"] });
