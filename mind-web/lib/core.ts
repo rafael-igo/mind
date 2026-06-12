@@ -143,7 +143,7 @@ export function validarGrafo(g: Grafo): void {
 // ----------------------------- Memória -----------------------------
 
 /** Parser mínimo de frontmatter YAML (só os campos que usamos). */
-function parseFrontmatter(texto: string): { meta: Record<string, string>; corpo: string } {
+export function parseFrontmatter(texto: string): { meta: Record<string, string>; corpo: string } {
   const meta: Record<string, string> = {};
   if (!texto.startsWith("---")) return { meta, corpo: texto };
   const fim = texto.indexOf("\n---", 3);
@@ -311,14 +311,16 @@ export function buscar(texto: string, docs: DocMemoria[]): { doc: DocMemoria; sc
     .filter((t) => t.length > 2 && !STOPWORDS.has(t));
   const res = docs.map((doc) => {
     const alvo = normalizar(`${doc.titulo} ${doc.id} ${doc.tags.join(" ")} ${doc.corpo}`);
+    // Eco de conversa não compete com conhecimento curado: o "título" de um chat é a
+    // PERGUNTA do usuário (ecoa qualquer pergunta parecida) — chat não ganha bônus de
+    // título e ainda pesa metade.
+    const ehChat = doc.tipo === "chat";
     let score = 0;
     for (const t of termos) {
-      if (normalizar(doc.titulo).includes(t)) score += 5;
+      if (!ehChat && normalizar(doc.titulo).includes(t)) score += 5;
       else if (alvo.includes(t)) score += 1;
     }
-    // Eco de conversa não compete com conhecimento curado: chats (memória episódica)
-    // pesam metade — a pergunta do usuário ecoa no título do chat e venceria sempre.
-    if (doc.tipo === "chat") score *= 0.5;
+    if (ehChat) score *= 0.5;
     return { doc, score };
   });
   return res.filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
@@ -769,9 +771,14 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
   if (vetoriais) {
     for (const v of vetoriais) {
       if (v.score < 0.55) continue; // similaridade fraca não entra
-      const doc = memoria.find((d) => d.id === v.docId);
-      if (doc && !achados.some((a) => a.doc.id === doc.id)) {
-        achados.push({ doc, score: v.score * 8 }); // escala comparável à lexical
+      const ja = achados.find((a) => a.doc.id === v.docId);
+      if (ja) {
+        // Os DOIS sinais concordam => reforça. Sem isso, o doc certo (lexical+vetorial)
+        // perdia para vizinhos genéricos achados só pela vetorial (que ganhavam o x8).
+        ja.score += v.score * 4;
+      } else {
+        const doc = memoria.find((d) => d.id === v.docId);
+        if (doc) achados.push({ doc, score: v.score * 8 }); // escala comparável à lexical
       }
     }
     achados.sort((a, b) => b.score - a.score);

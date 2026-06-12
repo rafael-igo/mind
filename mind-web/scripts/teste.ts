@@ -217,6 +217,38 @@ const r26 = await orquestrar({ usuario: "operador-exemplo", texto: "me explica i
 ok(!r26.permitido && r26.modo === "negado",
   "Foco — nó restrito em foco NEGado para operador (foco não fura permissão)");
 
+// --- Memória editável: input de dados/arquivos + edição dos RAGs (curadoria humana) ---
+const me = await import("../lib/memoria-editor.ts");
+const novoDoc = me.criarDoc(raiz, { titulo: "Teste de Curadoria Mind", corpo: "Conteúdo de teste.", comunidade: "_inbox", sensibilidade: "interno", tags: ["teste"] });
+ok(!carregarMemoria(raiz).some((d) => d.id === novoDoc.id) && me.listarInbox(raiz).some((d) => d.id === novoDoc.id),
+  "Memória — doc novo no _inbox é PRÉ-memória: invisível à busca até a curadoria");
+
+me.aprovarDoInbox(raiz, novoDoc.id, "profunda");
+ok(carregarMemoria(raiz).some((d) => d.id === novoDoc.id && d.comunidade === "profunda"),
+  "Memória — aprovação do _inbox publica na comunidade profunda");
+
+me.editarDoc(raiz, novoDoc.id, { corpo: "Conteúdo editado.", sensibilidade: "restrito" });
+const docEditado = carregarMemoria(raiz).find((d) => d.id === novoDoc.id)!;
+ok(docEditado.corpo === "Conteúdo editado." && docEditado.sensibilidade === "restrito",
+  "Memória — edição de RAG altera corpo e sensibilidade preservando o restante");
+
+ok(me.ehDaMind(docEditado.arquivo, raiz) && !me.ehDaMind("/tmp/doc-de-base-externa.md", raiz),
+  "Memória — só arquivos da memória da Mind são editáveis (bases externas read-only)");
+
+const up = me.importarArquivo(raiz, "regras-novas.html", "<h1>Regras</h1><p>Corpo &amp; teste</p><script>x()</script>", "rafael");
+const upDoc = me.listarInbox(raiz).find((d) => d.id === up.id)!;
+ok(upDoc.corpo.includes("Corpo & teste") && !upDoc.corpo.includes("<p>") && !upDoc.corpo.includes("x()"),
+  "Memória — upload .html converte para texto limpo e cai no _inbox");
+
+me.mandarParaLixeira(raiz, novoDoc.id);
+ok(!carregarMemoria(raiz).some((d) => d.id === novoDoc.id) && fs.readdirSync(path.join(raiz, "memoria", "_lixeira")).some((f) => f.includes(novoDoc.id)),
+  "Memória — lixeira tira o doc da busca sem apagar de verdade");
+
+// Limpeza dos artefatos de memória do teste
+fs.rmSync(up.arquivo, { force: true });
+for (const f of fs.readdirSync(path.join(raiz, "memoria", "_lixeira")).filter((f) => f.includes(novoDoc.id)))
+  fs.rmSync(path.join(raiz, "memoria", "_lixeira", f), { force: true });
+
 // --- Autenticação: senha (scrypt) e token de sessão (HMAC) ---
 const { hashSenha, verificarSenha, criarToken, verificarToken } = await import("../lib/auth.ts");
 const hSenha = hashSenha("teste-123");

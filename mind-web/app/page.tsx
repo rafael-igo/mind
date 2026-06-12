@@ -7,6 +7,15 @@ interface AreaCriador {
   exploracoes: { id: string; problema: string; criadaEm: string; abordagens: number }[];
   propostasPendentes: { id: string; pedido: string; autor: string; criadaEm: string; noAlvo: string }[];
 }
+interface DocLista {
+  id: string; titulo: string; tipo: string; comunidade: string;
+  sensibilidade: string; tags: string[]; tamanho: number; editavel: boolean;
+}
+interface DocAberto {
+  id?: string; titulo: string; corpo: string; comunidade: string;
+  sensibilidade: string; tags: string[]; editavel: boolean; novo?: boolean;
+}
+const SENSIBILIDADES = ["publico", "interno", "restrito", "confidencial"];
 interface DetalheNo {
   no: { id: string; tipo: string; titulo: string; descricao?: string; sensibilidade: string; status: string };
   arestas: { de: string; para: string; tipo: string; label?: string }[];
@@ -29,6 +38,11 @@ export default function Painel() {
   const [saude, setSaude] = useState<{ gateway: boolean; ollama: boolean; vetorial: { chunks: number | null } } | null>(null);
   const [criador, setCriador] = useState<AreaCriador | null>(null);
   const [foco, setFoco] = useState<{ id: string; titulo: string } | null>(null);
+  const [memAberta, setMemAberta] = useState(false);
+  const [memLista, setMemLista] = useState<{ docs: DocLista[]; inbox: DocLista[]; curador: boolean } | null>(null);
+  const [memDoc, setMemDoc] = useState<DocAberto | null>(null);
+  const [memInfo, setMemInfo] = useState("");
+  const arquivoRef = useRef<HTMLInputElement>(null);
   const grafoRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -109,6 +123,59 @@ export default function Painel() {
     el.addEventListener("click", fn);
     return () => el.removeEventListener("click", fn);
   }, [idsNos]);
+
+  // ---- 📚 Memória: input de dados/arquivos + edição dos RAGs (curadoria humana)
+  const carregarMemLista = useCallback(async () => {
+    const r = await fetch("/api/memoria");
+    if (r.ok) setMemLista(await r.json());
+  }, []);
+
+  useEffect(() => { if (eu && memAberta) carregarMemLista(); }, [eu, memAberta, carregarMemLista]);
+
+  async function abrirMemDoc(id: string) {
+    const r = await fetch(`/api/memoria/${id}`);
+    if (r.ok) { setMemDoc(await r.json()); setMemInfo(""); }
+    else setMemInfo((await r.json()).erro ?? "não consegui abrir");
+  }
+
+  async function salvarMemDoc() {
+    if (!memDoc) return;
+    const corpoReq = {
+      titulo: memDoc.titulo, corpo: memDoc.corpo, sensibilidade: memDoc.sensibilidade,
+      tags: memDoc.tags, comunidade: memDoc.comunidade,
+    };
+    const r = memDoc.novo
+      ? await fetch("/api/memoria", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpoReq) })
+      : await fetch(`/api/memoria/${memDoc.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(corpoReq) });
+    const j = await r.json();
+    if (r.ok) { setMemInfo(memDoc.novo ? `✅ criado (${j.id}) em ${j.comunidade ?? memDoc.comunidade}` : "✅ salvo"); setMemDoc(null); carregarMemLista(); }
+    else setMemInfo(`⚠️ ${j.erro}`);
+  }
+
+  async function aprovarMemDoc(id: string, destino: "recente" | "profunda") {
+    const r = await fetch(`/api/memoria/${id}/aprovar`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ destino }) });
+    const j = await r.json();
+    setMemInfo(r.ok ? `✅ aprovado para ${destino}` : `⚠️ ${j.erro}`);
+    setMemDoc(null);
+    carregarMemLista();
+  }
+
+  async function lixeiraMemDoc(id: string) {
+    const r = await fetch(`/api/memoria/${id}`, { method: "DELETE" });
+    const j = await r.json();
+    setMemInfo(r.ok ? "🗑️ movido para a _lixeira" : `⚠️ ${j.erro}`);
+    setMemDoc(null);
+    carregarMemLista();
+  }
+
+  async function uploadMemArquivo(f: File) {
+    const fd = new FormData();
+    fd.append("arquivo", f);
+    const r = await fetch("/api/memoria/upload", { method: "POST", body: fd });
+    const j = await r.json();
+    setMemInfo(r.ok ? `✅ "${f.name}" importado para o _inbox (${j.id}) — aguardando curadoria` : `⚠️ ${j.erro}`);
+    carregarMemLista();
+  }
 
   // ---- Foco (card → chat): o HUMANO pergunta; a Mind anexa o contexto do nó.
   // Sem chamada de LLM aqui — só orientação local para o usuário saber o que dá pra fazer.
@@ -194,20 +261,141 @@ export default function Painel() {
       <section style={{ position: "relative", overflow: "auto", borderRight: "1px solid #232a45" }}>
         <header style={{ padding: "12px 20px", position: "sticky", top: 0, background: "#0b1020ee", zIndex: 2,
           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span><b>🧠 Mind</b> <span style={{ opacity: 0.6, fontSize: 13 }}>— grafo (JSON é a verdade; clique num nó)</span></span>
-          {saude && (
-            <span style={{ fontSize: 12, display: "flex", gap: 10 }}>
+          <span><b>🧠 Mind</b> <span style={{ opacity: 0.6, fontSize: 13 }}>— {memAberta ? "memória (curadoria)" : "grafo (JSON é a verdade; clique num nó)"}</span></span>
+          <span style={{ fontSize: 12, display: "flex", gap: 10, alignItems: "center" }}>
+            {saude && (<>
               <span title="Gateway LLM (4101)">{saude.gateway ? "🟢" : "🔴"} gateway</span>
               <span title="Ollama — embeddings; a máquina liga sob demanda">
                 {saude.ollama ? "🟢" : "⚪"} ollama{saude.ollama ? "" : " (desligado — busca lexical)"}
               </span>
               <span title="Chunks na memória vetorial (pgvector)">🧩 {saude.vetorial.chunks ?? "—"}</span>
-            </span>
-          )}
+            </>)}
+            <button onClick={() => { setMemAberta(!memAberta); setMemDoc(null); }}
+              style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid #2c3558",
+                background: memAberta ? "#6366f1" : "transparent", color: "#e6e9f0", cursor: "pointer" }}>
+              {memAberta ? "🕸️ grafo" : "📚 memória"}
+            </button>
+          </span>
         </header>
         <style>{"g.node { cursor: pointer } g.node:hover { opacity: 0.85 }"}</style>
-        <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
-          style={{ padding: 20, minHeight: "70vh", display: "flex", justifyContent: "center" }} />
+
+        {/* ---- 📚 Memória: input de dados/arquivos + edição dos RAGs ---- */}
+        {memAberta && (
+          <div style={{ padding: 20, maxWidth: 860, margin: "0 auto" }}>
+            {memInfo && <div style={{ fontSize: 13, marginBottom: 10, opacity: 0.85 }}>{memInfo}</div>}
+
+            {!memDoc && (<>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <button onClick={() => setMemDoc({ titulo: "", corpo: "", comunidade: memLista?.curador ? "profunda" : "_inbox", sensibilidade: "interno", tags: [], editavel: true, novo: true })}
+                  style={{ padding: "8px 14px", borderRadius: 8, border: 0, background: "#6366f1", color: "white", cursor: "pointer", fontSize: 13 }}>
+                  ➕ novo documento
+                </button>
+                <button onClick={() => arquivoRef.current?.click()}
+                  style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #2c3558", background: "transparent", color: "#e6e9f0", cursor: "pointer", fontSize: 13 }}>
+                  ⬆️ importar arquivo (.md .txt .html)
+                </button>
+                <input ref={arquivoRef} type="file" accept=".md,.txt,.html,.htm" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMemArquivo(f); e.target.value = ""; }} />
+              </div>
+
+              {memLista?.curador && (
+                <div style={{ marginBottom: 16 }}>
+                  <b style={{ fontSize: 14 }}>📥 _inbox (pré-memória aguardando curadoria)</b>
+                  {memLista.inbox.length === 0 && <div style={{ fontSize: 13, opacity: 0.5, marginTop: 4 }}>vazio</div>}
+                  {memLista.inbox.map((d) => (
+                    <div key={d.id} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13 }}>
+                      <span onClick={() => abrirMemDoc(d.id)} style={{ flex: 1, cursor: "pointer" }}>📄 {d.titulo} <i style={{ opacity: 0.5 }}>({Math.round(d.tamanho / 100) / 10}k)</i></span>
+                      <button onClick={() => aprovarMemDoc(d.id, "recente")} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#16a34a", color: "white", cursor: "pointer" }}>→ recente</button>
+                      <button onClick={() => aprovarMemDoc(d.id, "profunda")} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#0e7490", color: "white", cursor: "pointer" }}>→ profunda</button>
+                      <button onClick={() => lixeiraMemDoc(d.id)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: 0, background: "#dc2626", color: "white", cursor: "pointer" }}>🗑️</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {["profunda", "recente"].map((com) => (
+                <div key={com} style={{ marginBottom: 16 }}>
+                  <b style={{ fontSize: 14 }}>{com === "profunda" ? "🧠 profunda (semântica)" : "🕐 recente (episódica)"}</b>
+                  {memLista?.docs.filter((d) => d.comunidade === com).map((d) => (
+                    <div key={d.id} onClick={() => abrirMemDoc(d.id)}
+                      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13, cursor: "pointer" }}>
+                      <span style={{ flex: 1 }}>📄 {d.titulo}</span>
+                      <span style={{ opacity: 0.5, fontSize: 11 }}>{d.sensibilidade} · {Math.round(d.tamanho / 100) / 10}k</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {(memLista?.docs.some((d) => !d.editavel) ?? false) && (
+                <div style={{ marginBottom: 16 }}>
+                  <b style={{ fontSize: 14 }}>🔗 bases externas <i style={{ opacity: 0.5, fontWeight: "normal" }}>(somente leitura)</i></b>
+                  {memLista!.docs.filter((d) => !d.editavel).map((d) => (
+                    <div key={d.id} onClick={() => abrirMemDoc(d.id)}
+                      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13, cursor: "pointer", opacity: 0.75 }}>
+                      <span style={{ flex: 1 }}>📄 {d.titulo}</span>
+                      <span style={{ opacity: 0.6, fontSize: 11 }}>{d.sensibilidade}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>)}
+
+            {memDoc && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span onClick={() => setMemDoc(null)} style={{ cursor: "pointer", opacity: 0.7, fontSize: 13 }}>← voltar</span>
+                  <span style={{ fontSize: 12, opacity: 0.6 }}>
+                    {memDoc.novo ? "novo documento" : `${memDoc.id} · ${memDoc.comunidade}`}{!memDoc.editavel && " · 🔗 somente leitura"}
+                  </span>
+                </div>
+                <input value={memDoc.titulo} onChange={(e) => setMemDoc({ ...memDoc, titulo: e.target.value })}
+                  placeholder="título" disabled={!memDoc.editavel}
+                  style={{ padding: 10, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558", fontSize: 15 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  {memDoc.novo && memLista?.curador && (
+                    <select value={memDoc.comunidade} onChange={(e) => setMemDoc({ ...memDoc, comunidade: e.target.value })}
+                      style={{ padding: 8, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }}>
+                      <option value="profunda">profunda</option>
+                      <option value="recente">recente</option>
+                      <option value="_inbox">_inbox</option>
+                    </select>
+                  )}
+                  <select value={memDoc.sensibilidade} disabled={!memDoc.editavel || !memLista?.curador}
+                    onChange={(e) => setMemDoc({ ...memDoc, sensibilidade: e.target.value })}
+                    style={{ padding: 8, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }}>
+                    {SENSIBILIDADES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input value={memDoc.tags.join(", ")} disabled={!memDoc.editavel}
+                    onChange={(e) => setMemDoc({ ...memDoc, tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })}
+                    placeholder="tags (separadas por vírgula)"
+                    style={{ flex: 1, padding: 8, borderRadius: 8, background: "#161c33", color: "#e6e9f0", border: "1px solid #2c3558" }} />
+                </div>
+                <textarea value={memDoc.corpo} onChange={(e) => setMemDoc({ ...memDoc, corpo: e.target.value })}
+                  readOnly={!memDoc.editavel} placeholder="conteúdo em Markdown…"
+                  style={{ minHeight: "48vh", padding: 12, borderRadius: 8, background: "#161c33", color: "#e6e9f0",
+                    border: "1px solid #2c3558", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6, resize: "vertical" }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  {memDoc.editavel && (memLista?.curador || memDoc.novo) && (
+                    <button onClick={salvarMemDoc}
+                      style={{ padding: "10px 18px", borderRadius: 8, border: 0, background: "#6366f1", color: "white", cursor: "pointer" }}>
+                      💾 salvar{memDoc.novo && !memLista?.curador ? " no _inbox (curadoria)" : ""}
+                    </button>
+                  )}
+                  {!memDoc.novo && memDoc.comunidade === "_inbox" && memLista?.curador && (<>
+                    <button onClick={() => aprovarMemDoc(memDoc.id!, "recente")} style={{ padding: "10px 14px", borderRadius: 8, border: 0, background: "#16a34a", color: "white", cursor: "pointer" }}>aprovar → recente</button>
+                    <button onClick={() => aprovarMemDoc(memDoc.id!, "profunda")} style={{ padding: "10px 14px", borderRadius: 8, border: 0, background: "#0e7490", color: "white", cursor: "pointer" }}>aprovar → profunda</button>
+                  </>)}
+                  {!memDoc.novo && memDoc.editavel && memLista?.curador && (
+                    <button onClick={() => lixeiraMemDoc(memDoc.id!)} style={{ marginLeft: "auto", padding: "10px 14px", borderRadius: 8, border: 0, background: "#dc2626", color: "white", cursor: "pointer" }}>🗑️ lixeira</button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!memAberta && <div ref={grafoRef} dangerouslySetInnerHTML={{ __html: svg }}
+          style={{ padding: 20, minHeight: "70vh", display: "flex", justifyContent: "center" }} />}
 
         {detalhe && (
           <aside style={{ position: "absolute", top: 60, left: 20, width: 340, padding: 16, borderRadius: 12,

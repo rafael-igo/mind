@@ -12,6 +12,7 @@ Conhecimento consolidado e curado — a Mind responde a partir daqui com confian
 - [[papeis-raci-rsvp]]
 - [[papel-operador]]
 - [[pendente-aereo]]
+- [[politica-transfer-noturno]]
 - [[processo-de-check-in-nfc]]
 - [[sla-igo-oficial]]
 - [[sla-rsvp]]
