@@ -62,6 +62,10 @@ LLM real via **gateway exclusivo da Mind** (branch `mind-gateway` do igo-ai-gate
 modelo é escolhido pelo nível do usuário** (operador→Haiku 4.5, coordenador/RH→Sonnet 4.6,
 diretor→Opus 4.8, criador→Fable 5).
 
+**Autenticação**: o painel exige login (senha scrypt + sessão por cookie HTTP-only assinado);
+a identidade vem da sessão — o corpo da requisição não escolhe usuário. Senhas em
+`permissoes/usuarios.json` (fora do Git): `npm run usuario -- <id> <senha>` cadastra/troca.
+
 Rodar: `cd mind-web && npm install && npm run teste` (offline) ou
 `node --env-file=.env --experimental-strip-types scripts/teste.ts` (com gateway).
 
