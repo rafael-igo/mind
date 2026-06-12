@@ -570,6 +570,8 @@ export interface PerguntaInput {
   texto: string;
   /** Nó em foco (card → chat): a pergunta do humano vai com a ficha deste nó como contexto. */
   foco?: string;
+  /** Fase 7 — memória de sessão: últimas trocas do chat (o painel manda; pronomes resolvem). */
+  historico?: { de: "eu" | "mind"; texto: string }[];
 }
 
 export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz()): Promise<RespostaOrquestrador> {
@@ -836,7 +838,25 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
 
   // Orquestrador: recupera memória relevante (limiar evita falso-positivo por 1 palavra solta)
   const LIMIAR = 2;
-  const achados = buscar(input.texto, memoria).filter((a) => a.score >= LIMIAR);
+  const historico = (input.historico ?? []).slice(-8);
+  let achados = buscar(input.texto, memoria).filter((a) => a.score >= LIMIAR);
+
+  // Fase 7 — follow-up: "e quem cuida disso?" não tem termos próprios. A busca da
+  // CONVERSA (últimas perguntas + atual) se mescla à direta com peso 0.5 — o assunto
+  // recente puxa o doc certo sem dominar quando o usuário troca de assunto.
+  if (historico.length) {
+    const conversa = historico.filter((h) => h.de === "eu").slice(-2).map((h) => h.texto).join(" ");
+    if (conversa) {
+      for (const r of buscar(`${conversa} ${input.texto}`, memoria)) {
+        const s = r.score * 0.5;
+        if (s < LIMIAR) continue;
+        const ja = achados.find((a) => a.doc.id === r.doc.id);
+        if (ja) ja.score = Math.max(ja.score, s);
+        else achados.push({ doc: r.doc, score: s });
+      }
+      achados.sort((a, b) => b.score - a.score);
+    }
+  }
 
   // Busca HÍBRIDA: a vetorial (Ollama+pgvector) complementa a lexical quando disponível;
   // Ollama desligado => null e a Mind segue só com a lexical (degradação silenciosa).
@@ -914,23 +934,40 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
     if (dominio) trilha = trilhaDeGestao(grafo, dominio);
   }
 
+  // Fase 8 (composição): pergunta que toca pendência/prazo CONSULTA o Motor de SLA
+  // na mesma resposta — o orquestrador compõe memória + grafo + motor, como um gerente.
+  let estadoSla = "";
+  if (/(\bsla\b|pendente|pendencia|prazo|atras|estour)/.test(normalizar(input.texto)) || pedeEncaminhamento(input.texto)) {
+    const pendencias = carregarPendencias(raiz);
+    if (pendencias.length) estadoSla = resumirSla(calcularSla(pendencias));
+  }
+
   const ficha = focoNo && grafoFoco ? fichaDoNo(grafoFoco, focoNo) : "";
   const blocoContexto =
     (ficha ? `### Nó em foco (grafo — fonte da verdade)\n${ficha}\n\n` : "") +
     (trilha ? `### Conhecimento de gestão (grafo)\n${trilha}\n\n` : "") +
+    (estadoSla ? `### Estado atual da operação (Motor de SLA — determinístico, agora)\n${estadoSla}\n\n` : "") +
     [...base, ...docsRelacionados].map((d) => `### ${d.titulo} (${d.id})\n${d.corpo}`).join("\n\n");
   const idsContexto = [
     ...(focoNo ? [focoNo.id] : []),
     ...docsFoco.map((d) => d.id),
     ...contexto.map((d) => d.id),
     ...docsRelacionados.map((d) => d.id),
+    ...(estadoSla ? ["motor-sla"] : []),
   ];
+
+  // Fase 7 — a conversa recente vai no prompt: pronomes e continuidade resolvem no LLM.
+  const blocoConversa = historico.length
+    ? `Conversa recente (contexto de continuidade):\n` +
+      historico.map((h) => `${h.de === "eu" ? usuario.id : "Mind"}: ${h.texto.slice(0, 400)}`).join("\n") + "\n\n"
+    : "";
 
   // Fala: tenta o gateway; se não houver, modo offline (prova recuperação + permissão)
   // O controle de acesso é determinístico e já aconteceu acima — o LLM não deve recusar por confidencialidade.
   const viaGateway = await chamarGateway(
     SYSTEM_PROMPT,
-    `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel})` +
+    blocoConversa +
+      `Pergunta de ${usuario.id} (nível de acesso: ${usuario.nivel})` +
       (focoNo ? ` — com o nó "${focoNo.titulo}" em foco no painel` : "") +
       `: ${input.texto}\n\n` +
       `A Mind já verificou as permissões: este usuário PODE ver todos os documentos do contexto abaixo. ` +
@@ -955,7 +992,8 @@ export async function orquestrar(input: PerguntaInput, raiz = resolverDadosRaiz(
       ? `[offline] Encontrei na memória: "${melhorDoc.titulo}". ${melhorDoc.corpo.split("\n").find((l) => l.trim().length > 0) ?? ""}`
       : `[offline] ${ficha}`) +
     (docsRelacionados.length ? `\nRelacionados puxados: ${docsRelacionados.map((d) => d.id).join(", ")}` : "") +
-    (trilha ? `\n${trilha}` : "");
+    (trilha ? `\n${trilha}` : "") +
+    (estadoSla ? `\n[Motor de SLA] ${estadoSla.split("\n")[0]}` : "");
   return {
     usuario: usuario.id, nivel: usuario.nivel, rank, permitido: true,
     contexto: idsContexto, modo: "offline", resposta,

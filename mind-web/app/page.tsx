@@ -289,7 +289,12 @@ export default function Painel() {
       const r = await fetch("/api/perguntar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ texto: pergunta, foco: foco?.id }), // identidade vem da sessão, não do corpo
+        body: JSON.stringify({
+          texto: pergunta,
+          foco: foco?.id,
+          // Fase 7 — memória de sessão: as últimas trocas viajam junto (pronomes resolvem)
+          historico: mensagens.slice(-8).map((m) => ({ de: m.de, texto: m.texto.slice(0, 400) })),
+        }), // identidade vem da sessão, não do corpo
       });
       const j = await r.json();
       setMensagens((m) => [...m, {

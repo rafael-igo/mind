@@ -91,6 +91,23 @@ simples**. O **teste da fase é o *definition of done*** — não passa para a p
 - **Próximos domínios:** logística (aéreo/transfer/hospedagem como nós), SigaEvento, LP —
   cada um entra ancorado em memória registrada, nunca inventado.
 
+### Fase 7 — Conversa com memória de sessão ✅ entregue 12/jun/2026
+- O painel manda as últimas trocas junto com a pergunta; pronomes e continuidade resolvem
+  ("e quem cuida disso?" acha o doc do assunto anterior). A busca da conversa se mescla à
+  direta com peso 0.5 — o assunto recente puxa sem dominar quando o usuário troca de tema.
+
+### Fase 8 — Orquestrador compositor 🔄 v1 entregue 12/jun/2026
+- **v1 (determinística):** pergunta que toca pendência/prazo/encaminhamento compõe na MESMA
+  resposta: memória + trilha de escalonamento do grafo + estado atual do Motor de SLA.
+  "Nem tudo é IA" — a composição é código; o LLM redige por cima do que os motores calcularam.
+- **v2 (futura):** tool use real via gateway (o LLM decide quais motores chamar no meio da
+  resposta) — exige suporte a tools no contrato /v1/batch do mind-gateway.
+
+### Fases seguintes (mapeadas)
+- **Fase 9 — Operação real:** Motor de SLA nas pendências reais + proatividade (alertas de estouro).
+- **Fase 10 — O "sono":** motor-consolidacao (recente → profunda via freio, periódico) — já no grafo como planejado.
+- **Fase 11 — Produção:** Docker do painel+gateway, deploy, HTTPS, revogação de sessão, backup.
+
 ## Próximo movimento operacional
 
 Quando Rafael colocar o Claude no Project, arranca-se pela **Fase 0**, levando só as decisões

@@ -294,6 +294,27 @@ fs.rmSync(up.arquivo, { force: true });
 for (const f of fs.readdirSync(path.join(raiz, "memoria", "_lixeira")).filter((f) => f.includes(novoDoc.id)))
   fs.rmSync(path.join(raiz, "memoria", "_lixeira", f), { force: true });
 
+// --- Fase 7: conversa com memória de sessão (follow-up resolve pelo histórico) ---
+const r30 = await orquestrar({
+  usuario: "operador-exemplo",
+  texto: "e quem fica responsavel por resolver isso?",
+  historico: [
+    { de: "eu", texto: "o que é pendente aéreo?" },
+    { de: "mind", texto: "Pendente Aéreo é um status do grupo PROCESSAMENTO..." },
+  ],
+}, raiz);
+ok(r30.modo !== "sem-memoria" && r30.contexto.includes("pendente-aereo"),
+  "Fase 7 — follow-up sem termos próprios acha a memória certa pelo histórico da conversa");
+
+const r31 = await orquestrar({ usuario: "operador-exemplo", texto: "e quem fica responsavel por resolver isso?" }, raiz);
+ok(r31.modo === "sem-memoria" || !r31.contexto.includes("pendente-aereo"),
+  "Fase 7 — sem histórico, o mesmo follow-up não acha (prova que o histórico fez a diferença)");
+
+// --- Fase 8 (v1): composição — memória + trilha do grafo + Motor de SLA na MESMA resposta ---
+const r32 = await orquestrar({ usuario: "operador-exemplo", texto: "convidado pendente há dias, qual o próximo passo?" }, raiz);
+ok(r32.resposta.includes("escala para") && r32.resposta.includes("[Motor de SLA]") && r32.contexto.includes("motor-sla"),
+  "Fase 8 — orquestrador compõe: memória + trilha de escalonamento + Motor de SLA juntos");
+
 // --- Autenticação: senha (scrypt) e token de sessão (HMAC) ---
 const { hashSenha, verificarSenha, criarToken, verificarToken } = await import("../lib/auth.ts");
 const hSenha = hashSenha("teste-123");
